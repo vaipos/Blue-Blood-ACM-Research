@@ -54,8 +54,8 @@ To start the project, clone the repository and install the required dependencies
 Remember to replace "your-username" with your Github username.
 
 ```bash
-git clone https://github.com/your-username/Blue-Blood_ACM-Research.git
-cd Blue-Blood_ACM-Research
+git clone https://github.com/your-username/Blue-Blood-ACM-Research.git
+cd Blue-Blood-ACM-Research
 ```
 
 ### 2. Install dependencies:
