@@ -84,7 +84,7 @@ If you see version numbers in response, you already have Python and/or Conda ins
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the APACHE License - see the [LICENSE](LICENSE) file for details.
 
 
 
