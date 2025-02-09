@@ -1,6 +1,6 @@
-# Blue-Blood
+# Blue-Blood Onboarding and Review
 
-Welcome to the **Blue-Blood-ACM-Research** repository! This project is part of an ongoing research effort aimed at integrating simulated drug interaction data and transfer learning to predict changes in a patient's blood profile after drug administration.
+Congratulations and welcome to the **Blue-Blood-ACM-Research** repository! This project is part of an ongoing research effort aimed at integrating simulated drug interaction data and transfer learning to predict changes in a patient's blood profile after drug administration.
 
 ## Project Overview
 
@@ -11,7 +11,7 @@ The primary goal of this project is to develop a machine learning (ML) model tha
 - Use transfer learning to improve model performance despite the lack of post-treatment data.
 - Analyze how drug interactions may affect a patient's blood profile in real-world scenarios.
 
-## Technologies Used
+## Technologies Used:
 
 - **Python** for model development
 - **TensorFlow/PyTorch** for deep learning model training
