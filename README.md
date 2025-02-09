@@ -33,9 +33,29 @@ To start the project, clone the repository and install the required dependencies
 **More setup instructions will be provided to you during Build Night 1**. 
 
 ### 1. Clone the repository:
+
+#### Option 1: Using GitHub Desktop (if you have never worked with Git before):
+
+1. **Download and Install GitHub Desktop**:
+   - Go to the [GitHub Desktop download page](https://desktop.github.com/).
+   - Download the version for your operating system (Windows or macOS).
+   - Follow the installation instructions to install GitHub Desktop on your computer.
+
+2. **Clone the repository using GitHub Desktop**:
+   - Open GitHub Desktop.
+   - Go to the **File** menu and select **Clone repository**.
+   - In the **Clone a repository** window, select the **URL** tab.
+   - Copy the URL of the repository from GitHub (found under the green "Code" button on the repo page) and paste it into the **Repository URL** field in GitHub Desktop.
+   - Choose a local path to store the repository on your computer.
+   - Click **Clone** to download the repository to your computer.
+
+#### Option 2: Using git command line (if you have experiencing using git command lines):
+
+Remember to replace "your-username" with your Github username.
+
 ```bash
-git clone https://github.com/your-username/Blue-Blood-ACM-Research.git
-cd Blue-Blood-ACM-Research
+git clone https://github.com/your-username/Blue-Blood_ACM-Research.git
+cd Blue-Blood_ACM-Research
 ```
 
 ### 2. Install dependencies:
@@ -65,3 +85,11 @@ If you see version numbers in response, you already have Python and/or Conda ins
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+
+
+
+
+
+
