@@ -4,7 +4,7 @@ Congratulations and welcome to the **Blue-Blood-ACM-Research** repository! This 
 
 ## Project Overview
 
-The primary goal of this project is to develop a machine learning (ML) model that can integrate simulated drug interaction data with Complete Blood Count (CBC) blood profile data. The model will predict how a patient's blood profile changes following drug administration, even though post-treatment data is not yet available.
+The primary goal of this project is to develop a machine learning (ML) model that can integrate simulated drug interaction data with Complete Blood Count (CBC) blood profile data. The model will predict how a patient's blood profile changes following drug administration.
 
 ### Key Objectives:
 - Leverage drug compound datasets and CBC blood profile data to predict potential changes.
