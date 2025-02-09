@@ -1,4 +1,4 @@
-# Blue-Blood Onboarding and Review
+# Blue Blood Onboarding and Review
 
 Congratulations and welcome to the **Blue-Blood-ACM-Research** repository! This project is part of an ongoing research effort aimed at integrating simulated drug interaction data and transfer learning to predict changes in a patient's blood profile after drug administration.
 
