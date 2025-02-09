@@ -25,14 +25,17 @@ The project utilizes:
 - **Drug Compounds Dataset**: Contains information on various drug compounds.
 - **CBC Blood Profile Data**: Comprises patient blood test results, focusing on various blood components like white blood cells, red blood cells, and platelets.
 
-## Installation
+## Onboarding Process and Installation
+**Email your GitHub username to vaishnavi.pasumarthi@acmutd.co, and I will add you as a contributor to the repository.**
 
-To start the project, clone the repository and install the required dependencies. **More setup instructions will be provided to you during Build Night 1**. 
+To start the project, clone the repository and install the required dependencies.
+
+**More setup instructions will be provided to you during Build Night 1**. 
 
 ### 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/Blue-Blood_ACM-Research.git
-cd Blue-Blood_ACM-Research
+git clone https://github.com/your-username/Blue-Blood-ACM-Research.git
+cd Blue-Blood-ACM-Research
 ```
 
 ### 2. Install dependencies:
