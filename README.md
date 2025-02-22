@@ -49,7 +49,7 @@ To start the project, clone the repository and install the required dependencies
    - Choose a local path to store the repository on your computer.
    - Click **Clone** to download the repository to your computer.
 
-#### Option 2: Using git command line (if you have experience using git command lines):
+#### Option 2: Using git command line (if you have experiencing using git command lines):
 
 Remember to replace "your-username" with your Github username.
 
