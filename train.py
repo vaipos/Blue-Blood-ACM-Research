@@ -3,16 +3,24 @@ import argparse
 import pandas as pd
 import numpy as np
 import re
+import io
 import json
+import boto3
 import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
 import logging
+import pickle
+import matplotlib
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import joblib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+BUCKET_NAME = "blue-blood-data"
+
 
 def clean_and_convert(x):
     if isinstance(x, np.ndarray):  # If already a NumPy array, return as-is
@@ -94,9 +102,6 @@ def build_model(lstm_units=64, dropout_rate=0.2):
     return model
 
 def prepare_training_data(df):
-    # Process embeddings
-    df['prescription_rx_embeddings'] = df['prescription_rx_embeddings'].apply(clean_and_convert)
-    
     # Get unique patient/date pairs
     patient_date_pairs = get_unique_pairs(df)
     
@@ -140,9 +145,7 @@ def prepare_training_data(df):
     return np.array(X_train_list), np.array(y_train_list)
 
 def train_model(df, model, epochs=10, batch_size=1):
-    
     X, y = prepare_training_data(df)
-
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     history = model.fit(
@@ -152,18 +155,68 @@ def train_model(df, model, epochs=10, batch_size=1):
         validation_data=(X_val, y_val)
     )
 
-    logger.info(f"History: {history}")
-        
-    # Save metrics to model_dir if provided
-    if args.model_dir:
-        
+    logger.info(f"History: {history.history}")
 
-        # Save the model to s3
-        os.makedirs(args.model_dir, exist_ok=True)
-        joblib.dump(model, os.path.join(args.model_dir, 'lstm_model.pkl'))
+    # Save model locally
+    local_model_path = "lstm_model.pkl"
+    joblib.dump(model, local_model_path)
+
+    # Upload to S3
+    s3_client = boto3.client("s3")
+    s3_model_path = "baseline_model/lstm_model.pkl"
+
+    try:
+        s3_client.upload_file(local_model_path, BUCKET_NAME, s3_model_path)
+        logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
+    except Exception as e:
+        logger.error(f"Failed to upload model to S3: {str(e)}")
+
+    # Save metrics to model_dir if provided
+    # if args.model_dir:
+    #     # Save the model to s3
+    #     os.makedirs(args.model_dir, exist_ok=True)
+    #     joblib.dump(model, os.path.join(args.model_dir, 'lstm_model.pkl'))
 
     return history.history
     
+def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marker='s'):
+    print("STARTING CHARTING! \n")
+    
+    # Force Matplotlib to use a non-GUI backend
+    matplotlib.use("Agg")
+    
+    # Extract loss values
+    train_loss = history['loss']
+    val_loss = history.get('val_loss', None)
+    epochs_range = range(1, len(train_loss) + 1)
+
+    # Create plot
+    plt.figure(figsize=figsize)
+    plt.plot(epochs_range, train_loss, label='Train Loss', marker=train_marker)
+    if val_loss:
+        plt.plot(epochs_range, val_loss, label='Validation Loss', marker=val_marker)
+    
+    print("Creating PLOT \n")
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training vs Validation Loss')
+    plt.legend()
+    plt.grid(True)
+    
+    # Save plot to in-memory buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+
+    # Upload to S3
+    s3 = boto3.client("s3")
+    s3_chart_key = "baseline_model/baseline-training-validation-loss.png"
+    s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
+    
+    print(f"Plot saved to S3: s3://{BUCKET_NAME}/{s3_chart_key}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -201,3 +254,7 @@ if __name__ == '__main__':
     history = train_model(df, model, epochs=args.epochs, batch_size=args.batch_size)
     
     print("Training complete!")
+    print("History object:", history)
+    print("Keys:", history.keys())
+
+    chart_model_performance(history)
