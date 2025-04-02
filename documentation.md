@@ -5,14 +5,15 @@ This project uses machine learning to predict post-treatment blood profiles base
 
 ## Files
 
-### `lstm.ipynb`
-Notebook for configuring and executing AWS SageMaker training jobs.
+### `lstm.ipynb` / `bb-dev-lstm.ipynb`
+Notebook for configuring and executing AWS SageMaker training jobs. Both filenames refer to the same notebook with identical functionality.
 - **Features:**
   - Setting up SageMaker execution role and permissions
   - Verifying S3 data and code accessibility
   - Configuring TensorFlow estimator parameters
   - Launching training jobs with customizable hyperparameters
   - Job monitoring and model deployment
+  - Fetching and displaying training/validation loss plots from S3
 - **Training Configuration:**
   - Instance type: ml.m5.xlarge
   - Framework: TensorFlow 2.9
@@ -34,6 +35,7 @@ TensorFlow script for training an LSTM model on AWS SageMaker.
   - `build_model()`: Creates LSTM model architecture with configurable parameters
   - `prepare_training_data()`: Transforms dataframes into data that is usable by the model
   - `train_model()`: Handles training loop with validation split
+  - `chart_model_performance()`: Creates and saves training/validation loss plots to S3
 - **Model Architecture:**
   - TimeDistributed layer to process each time step
   - LSTM layer for sequence processing
@@ -42,7 +44,8 @@ TensorFlow script for training an LSTM model on AWS SageMaker.
 - **Execution:** 
   - Called by SageMaker with custom hyperparameters
   - Loads data from S3 paths
-  - Saves trained model and metrics back to S3 (not yet)
+  - Saves trained model and performance metrics to S3
+  - Generates and uploads performance visualization plots to S3
 
 ## Data Processing Workflow
 1. Load raw data from S3 containing prescription and blood test information
@@ -67,3 +70,6 @@ TensorFlow script for training an LSTM model on AWS SageMaker.
 
 ### `model_testing.ipynb`
 Basically just the local version of train.py
+
+### `preprocessing.ipynb`
+Preprocessing steps taken to get from original data to final_df.csv
