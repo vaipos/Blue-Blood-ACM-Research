@@ -5,8 +5,51 @@ This project uses machine learning to predict post-treatment blood profiles base
 
 ## Files
 
-### `lstm.ipynb` / `bb-dev-lstm.ipynb`
-Notebook for configuring and executing AWS SageMaker training jobs. Both filenames refer to the same notebook with identical functionality.
+### `hyperparam-loop.ipynb`
+Notebook for automated hyperparameter tuning of LSTM models using AWS SageMaker.
+- **Features:**
+  - Setting up AWS SageMaker session and IAM role permissions
+  - Verifying S3 data and code accessibility
+  - Systematically testing multiple hyperparameter combinations
+  - Running training jobs in parallel on SageMaker
+  - Fetching and displaying training/validation loss plots from S3
+- **Hyperparameters Tested:**
+  - Epochs: 10, 20, 50
+  - Learning rates: 0.001, 0.01, 0.1
+  - LSTM units: 32, 64, 128
+  - Dropout rates: 0.2, 0.3, 0.4
+- **Infrastructure:**
+  - Instance type: ml.m5.4xlarge
+  - Framework: TensorFlow 2.9
+  - Python version: 3.9
+
+### `train.py`
+TensorFlow script for training an LSTM model on AWS SageMaker.
+- **Key Functions:**
+  - `clean_and_convert()`: Preprocesses embedding strings to numpy arrays
+  - `get_unique_pairs()`: Creates dictionary mapping patient IDs to prescription dates
+  - `get_presc_input()`: Combines embeddings with dosage values and units
+  - `add_padding()`: Standardizes input shapes to (20, 130) for each timestep
+  - `build_model()`: Creates LSTM model architecture with configurable parameters
+  - `prepare_training_data()`: Transforms dataframes into model-ready format
+  - `train_model()`: Handles training loop with validation split and model saving
+  - `chart_model_performance()`: Creates and saves training/validation loss plots to S3
+- **Model Architecture:**
+  - TimeDistributed layer to process each time step
+  - LSTM layer for sequence processing
+  - Dropout for regularization
+  - Dense layer followed by reshape for output formatting
+- **Hyperparameters:**
+  - Configurable epochs, learning rate, LSTM units, and dropout rate
+  - Command-line arguments for SageMaker integration
+- **Execution:** 
+  - Invoked by SageMaker with custom hyperparameters
+  - Loads data from S3 paths
+  - Saves trained model to S3 as pickle file
+  - Generates and uploads performance visualization plots to S3
+
+### `bb-dev-lstm.ipynb`
+Notebook for configuring and executing AWS SageMaker training jobs. 
 - **Features:**
   - Setting up SageMaker execution role and permissions
   - Verifying S3 data and code accessibility
@@ -24,28 +67,6 @@ Notebook for configuring and executing AWS SageMaker training jobs. Both filenam
     - LSTM units
     - Dropout rate
     - Batch size
-
-### `train.py`
-TensorFlow script for training an LSTM model on AWS SageMaker.
-- **Key Functions:**
-  - `clean_and_convert()`: Preprocesses embedding strings to numpy arrays
-  - `get_unique_pairs()`: Creates dictionary mapping patient IDs to prescription dates
-  - `get_presc_input()`: combines embeddings w/ dosage vals and units
-  - `add_padding()`: Standardizes input shapes to (20, 130) for each timestep
-  - `build_model()`: Creates LSTM model architecture with configurable parameters
-  - `prepare_training_data()`: Transforms dataframes into data that is usable by the model
-  - `train_model()`: Handles training loop with validation split
-  - `chart_model_performance()`: Creates and saves training/validation loss plots to S3
-- **Model Architecture:**
-  - TimeDistributed layer to process each time step
-  - LSTM layer for sequence processing
-  - Dropout for regularization
-  - Dense layer followed by reshape for output formatting
-- **Execution:** 
-  - Called by SageMaker with custom hyperparameters
-  - Loads data from S3 paths
-  - Saves trained model and performance metrics to S3
-  - Generates and uploads performance visualization plots to S3
 
 ## Data Processing Workflow
 1. Load raw data from S3 containing prescription and blood test information
