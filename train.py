@@ -102,9 +102,9 @@ def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     return model
 
 def prepare_training_data(df):
-
     # Clean and convert the DataFrame
     df['prescription_rx_embeddings'] = df['prescription_rx_embeddings'].apply(clean_and_convert)
+
     # Get unique patient/date pairs
     patient_date_pairs = get_unique_pairs(df)
     
@@ -160,22 +160,19 @@ def train_model(df, model, epochs=10, job_name=None):
 
     logger.info(f"History: {history.history}")
     
-    
     s3_model_path = f"models/{job_name}/lstm_model.pkl"
     s3_chart_path = f"models/{job_name}/training-validation-loss.png"
     
-    # Save model directly to S3 using an in-memory buffer
+    # Save the model to in-memory buffer
     buf = io.BytesIO()
     pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
     buf.seek(0)
 
     s3_client = boto3.client("s3")
     
-    try:
-        s3_client.upload_fileobj(buf, BUCKET_NAME, s3_model_path)
-        logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
-    except Exception as e:
-        logger.error(f"Failed to upload model to S3: {str(e)}")
+    # Upload the model to S3
+    s3_client.upload_fileobj(buf, BUCKET_NAME, s3_model_path)
+    logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
 
     return history.history, s3_model_path, s3_chart_path
 
@@ -211,9 +208,7 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     plt.close()
     buf.seek(0)
     
-    # Determine the chart path based on job_name
-    if job_name:
-        s3_chart_key = f"models/{job_name}/training-validation-loss.png"
+    s3_chart_key = f"models/{job_name}/training-validation-loss.png"
 
     # Upload to S3
     s3 = boto3.client("s3")
@@ -241,11 +236,6 @@ if __name__ == '__main__':
     
     # Log job name from environment
     job_name = args.job_name
-
-    if job_name:
-        print(f"Running as part of SageMaker job: {job_name}")
-    else:
-        print("Running in local mode (no SageMaker job name found)")
     
     # Load training data
     print(f"Loading data from {args.train}")
@@ -276,36 +266,3 @@ if __name__ == '__main__':
     print("Keys:", history.keys())
 
     chart_model_performance(history, job_name=job_name)
-    
-    # Save a JSON file with hyperparameters and metrics for easier comparison
-    job_name = args.job_name
-    if job_name:
-        metrics = {
-            'hyperparameters': {
-                'epochs': args.epochs,
-                'learning_rate': args.learning_rate,
-                'lstm_units': args.lstm_units,
-                'dropout_rate': args.dropout_rate,
-                'batch_size': 1
-            },
-            'metrics': {
-                'final_loss': history['loss'][-1],
-                'final_val_loss': history.get('val_loss', [-1])[-1],
-                'history': {
-                    'loss': history['loss'],
-                    'val_loss': history.get('val_loss', [])
-                }
-            },
-            'model_path': model_path,
-            'chart_path': chart_path
-        }
-        
-        # Save metrics to S3
-        metrics_key = f"models/{job_name}/metrics.json"
-        s3 = boto3.client("s3")
-        s3.put_object(
-            Body=json.dumps(metrics, indent=2),
-            Bucket=BUCKET_NAME,
-            Key=metrics_key
-        )
-        print(f"Metrics saved to: s3://{BUCKET_NAME}/{metrics_key}")
