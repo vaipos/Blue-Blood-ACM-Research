@@ -9,12 +9,12 @@ import boto3
 import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
+from keras.callbacks import EarlyStopping
 import logging
 import pickle
 import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-import joblib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,20 +88,24 @@ def add_padding(prescriptions, pre_treatment, post_treatment):
     
     return padded_prescriptions, padded_pre_treatment, padded_post_treatment
 
-def build_model(lstm_units=64, dropout_rate=0.2):
+def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     model = Sequential([
         TimeDistributed(Flatten(), input_shape=(3, 20, 130)),
-        LSTM(64, return_sequences=False),
-        Dropout(0.2),
+        LSTM(lstm_units, return_sequences=False),
+        Dropout(dropout_rate),
         Dense(20 * 130, activation="linear"),
         Reshape((20, 130))
     ])
 
-    # Compile the model
-    model.compile(optimizer='adam', loss='mse')
+    # Compile the model with specified learning rate
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss='mse')
     return model
 
 def prepare_training_data(df):
+    # Clean and convert the DataFrame
+    df['prescription_rx_embeddings'] = df['prescription_rx_embeddings'].apply(clean_and_convert)
+
     # Get unique patient/date pairs
     patient_date_pairs = get_unique_pairs(df)
     
@@ -144,42 +148,44 @@ def prepare_training_data(df):
     
     return np.array(X_train_list), np.array(y_train_list)
 
-def train_model(df, model, epochs=10, batch_size=1):
+def train_model(df, model, epochs=10, job_name=None):
     X, y = prepare_training_data(df)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    early_stop = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    )
 
     history = model.fit(
         X_train, y_train, 
         epochs=epochs, 
-        batch_size=batch_size, 
-        validation_data=(X_val, y_val)
+        batch_size=1, 
+        validation_data=(X_val, y_val),
+        callbacks=[early_stop]
     )
 
     logger.info(f"History: {history.history}")
-
-    # Save model locally
-    local_model_path = "lstm_model.pkl"
-    joblib.dump(model, local_model_path)
-
-    # Upload to S3
-    s3_client = boto3.client("s3")
-    s3_model_path = "baseline_model/lstm_model.pkl"
-
-    try:
-        s3_client.upload_file(local_model_path, BUCKET_NAME, s3_model_path)
-        logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
-    except Exception as e:
-        logger.error(f"Failed to upload model to S3: {str(e)}")
-
-    # Save metrics to model_dir if provided
-    # if args.model_dir:
-    #     # Save the model to s3
-    #     os.makedirs(args.model_dir, exist_ok=True)
-    #     joblib.dump(model, os.path.join(args.model_dir, 'lstm_model.pkl'))
-
-    return history.history
     
-def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marker='s'):
+    s3_model_path = f"models/{job_name}/lstm_model.pkl"
+    s3_chart_path = f"models/{job_name}/training-validation-loss.png"
+    
+    # Save the model to in-memory buffer
+    buf = io.BytesIO()
+    pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
+    buf.seek(0)
+
+    s3_client = boto3.client("s3")
+    
+    # Upload the model to S3
+    s3_client.upload_fileobj(buf, BUCKET_NAME, s3_model_path)
+    logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
+
+    return history.history, s3_model_path, s3_chart_path
+
+# Function to chart model performance
+def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marker='s', job_name=None):
     print("STARTING CHARTING! \n")
     
     # Force Matplotlib to use a non-GUI backend
@@ -209,10 +215,11 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     plt.savefig(buf, format="png")
     plt.close()
     buf.seek(0)
+    
+    s3_chart_key = f"models/{job_name}/training-validation-loss.png"
 
     # Upload to S3
     s3 = boto3.client("s3")
-    s3_chart_key = "baseline_model/baseline-training-validation-loss.png"
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
     
     print(f"Plot saved to S3: s3://{BUCKET_NAME}/{s3_chart_key}")
@@ -224,9 +231,9 @@ if __name__ == '__main__':
     # Hyperparameters
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--learning-rate', type=float, default=0.001)
-    parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--lstm-units', type=int, default=64)
     parser.add_argument('--dropout-rate', type=float, default=0.2)
+    parser.add_argument("--job_name", type=str)
     
     # SageMaker parameters
     parser.add_argument('--model-dir', type=str, default=None, help='Directory to save model artifacts')
@@ -235,13 +242,16 @@ if __name__ == '__main__':
     
     args, _ = parser.parse_known_args()
     
+    # Log job name from environment
+    job_name = args.job_name
+    
     # Load training data
     print(f"Loading data from {args.train}")
     df = pd.read_csv(os.path.join(args.train, 'final_df.csv'))
     
     # Build model with specified hyperparameters
     print("Building model...")
-    model = build_model(lstm_units=args.lstm_units, dropout_rate=args.dropout_rate)
+    model = build_model(lstm_units=args.lstm_units, dropout_rate=args.dropout_rate, learning_rate=args.learning_rate)
 
     # Print model summary to logs
     stringlist = []
@@ -251,10 +261,16 @@ if __name__ == '__main__':
     
     # Train the model
     print("Starting model training...")
-    history = train_model(df, model, epochs=args.epochs, batch_size=args.batch_size)
+    history, model_path, chart_path = train_model(
+        df, 
+        model, 
+        epochs=args.epochs,
+        job_name=job_name
+    )
     
     print("Training complete!")
+    print(f"Model saved to: {model_path}")
     print("History object:", history)
     print("Keys:", history.keys())
 
-    chart_model_performance(history)
+    chart_model_performance(history, job_name=job_name)
