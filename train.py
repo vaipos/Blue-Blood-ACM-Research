@@ -14,6 +14,7 @@ import pickle
 import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+from scipy.stats import chi2_contingency
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,7 +63,6 @@ def get_presc_input(df):
 
     return prescriptions
 
-# function that adds the proper padding to our input arrays
 def add_padding(prescriptions, pre_treatment, post_treatment):
     # reshape pre_treatment and post_treatment to be 2D arrays
     pre_treatment = pre_treatment.reshape(1, -1)
@@ -158,6 +158,40 @@ def train_model(df, model, epochs=10, job_name=None):
         validation_data=(X_val, y_val)
     )
 
+    y_pred = model.predict(X_val)
+
+    # Perform the statistical analysis and print the results:
+
+    print("Mean Comparison between y_test and y_pred:")
+    mean_df, mean_new_df = calculate_mean(y_val, y_pred)
+    print("y_test Mean:\n", mean_df)
+    print("y_pred Mean:\n", mean_new_df)
+
+    print("\nMedian Comparison between y_test and y_pred:")
+    median_df, median_new_df = calculate_median(y_val, y_pred)
+    print("y_test Median:\n", median_df)
+    print("y_pred Median:\n", median_new_df)
+
+    print("\nStandard Deviation Comparison between y_test and y_pred:")
+    std_df, std_new_df = calculate_std(y_val, y_pred)
+    print("y_test Standard Deviation:\n", std_df)
+    print("y_pred Standard Deviation:\n", std_new_df)
+
+    print("\nSkewness Comparison between y_test and y_pred:")
+    skew_df, skew_new_df = calculate_skewness(y_val, y_pred)
+    print("y_test Skewness:\n", skew_df)
+    print("y_pred Skewness:\n", skew_new_df)
+
+    print("\nKurtosis Comparison between y_test and y_pred:")
+    kurt_df, kurt_new_df = calculate_kurtosis(y_val, y_pred)
+    print("y_test Kurtosis:\n", kurt_df)
+    print("y_pred Kurtosis:\n", kurt_new_df)
+
+    # If you have categorical columns, you can perform the Chi-Square test for both DataFrames
+    print("\nChi-Square Test between prescription_dose_val_rx and prescription_dose_unit_rx:")
+    chi_square_results = calculate_chi_square(y_val, y_pred, 'prescription_dose_val_rx', 'prescription_dose_unit_rx')
+    print(chi_square_results)
+
     logger.info(f"History: {history.history}")
     
     s3_model_path = f"models/{job_name}/lstm_model.pkl"
@@ -176,7 +210,6 @@ def train_model(df, model, epochs=10, job_name=None):
 
     return history.history, s3_model_path, s3_chart_path
 
-# Function to chart model performance
 def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marker='s', job_name=None):
     print("STARTING CHARTING! \n")
     
@@ -216,6 +249,47 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     
     print(f"Plot saved to S3: s3://{BUCKET_NAME}/{s3_chart_key}")
 
+# Function to calculate mean
+def calculate_mean(df1, df2):
+    return df1.mean(), df2.mean()
+
+# Function to calculate median
+def calculate_median(df1, df2):
+    return df1.median(), df2.median()
+
+# Function to calculate standard deviation
+def calculate_std(df1, df2):
+    return df1.std(), df2.std()
+
+# Function to calculate skewness
+def calculate_skewness(df1, df2):
+    return df1.apply(lambda x: skew(x, nan_policy='omit')), df2.apply(lambda x: skew(x, nan_policy='omit'))
+
+# Function to calculate kurtosis
+def calculate_kurtosis(df1, df2):
+    return df1.apply(lambda x: kurtosis(x, nan_policy='omit')), df2.apply(lambda x: kurtosis(x, nan_policy='omit'))
+
+# Function to calculate Chi-Square Test for categorical data
+def calculate_chi_square(df1, df2, cat_column1, cat_column2):
+    # Create contingency tables for both DataFrames
+    contingency_table1 = pd.crosstab(df1[cat_column1], df1[cat_column2])
+    contingency_table2 = pd.crosstab(df2[cat_column1], df2[cat_column2])
+    
+    # Perform Chi-Square test for both
+    chi2_stat1, p_value1, dof1, expected1 = chi2_contingency(contingency_table1)
+    chi2_stat2, p_value2, dof2, expected2 = chi2_contingency(contingency_table2)
+    
+    # Return the results
+    return {
+        "Chi2 Statistic (df)": chi2_stat1,
+        "P-value (df)": p_value1,
+        "Degrees of Freedom (df)": dof1,
+        "Expected Frequencies (df)": expected1,
+        "Chi2 Statistic (new df)": chi2_stat2,
+        "P-value (new df)": p_value2,
+        "Degrees of Freedom (new df)": dof2,
+        "Expected Frequencies (new df)": expected2
+    }
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -234,7 +308,6 @@ if __name__ == '__main__':
     
     args, _ = parser.parse_known_args()
     
-    # Log job name from environment
     job_name = args.job_name
     
     # Load training data
