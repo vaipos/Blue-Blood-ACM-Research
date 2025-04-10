@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from scipy.stats import chi2_contingency
+from scipy.stats import skew, kurtosis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -147,6 +148,69 @@ def prepare_training_data(df):
     
     return np.array(X_train_list), np.array(y_train_list)
 
+# Function to calculate mean
+def calculate_mean(df1, df2):
+    return df1.mean(), df2.mean()
+
+# Function to calculate median
+def calculate_median(df1, df2):
+    return df1.median(), df2.median()
+
+# Function to calculate standard deviation
+def calculate_std(df1, df2):
+    return df1.std(), df2.std()
+
+# Function to calculate skewness
+def calculate_skewness(df1, df2):
+    return df1.apply(lambda x: skew(x, nan_policy='omit')), df2.apply(lambda x: skew(x, nan_policy='omit'))
+
+# Function to calculate kurtosis
+def calculate_kurtosis(df1, df2):
+    return df1.apply(lambda x: kurtosis(x, nan_policy='omit')), df2.apply(lambda x: kurtosis(x, nan_policy='omit'))
+
+# Function to calculate Chi-Square Test for categorical data
+def calculate_chi_square(df1, df2, cat_column1, cat_column2):
+    # Create contingency tables for both DataFrames
+    contingency_table1 = pd.crosstab(df1[cat_column1], df1[cat_column2])
+    contingency_table2 = pd.crosstab(df2[cat_column1], df2[cat_column2])
+    
+    # Perform Chi-Square test for both
+    chi2_stat1, p_value1, dof1, expected1 = chi2_contingency(contingency_table1)
+    chi2_stat2, p_value2, dof2, expected2 = chi2_contingency(contingency_table2)
+    
+    # Return the results
+    return {
+        "Chi2 Statistic (df)": chi2_stat1,
+        "P-value (df)": p_value1,
+        "Degrees of Freedom (df)": dof1,
+        "Expected Frequencies (df)": expected1,
+        "Chi2 Statistic (new df)": chi2_stat2,
+        "P-value (new df)": p_value2,
+        "Degrees of Freedom (new df)": dof2,
+        "Expected Frequencies (new df)": expected2
+    }
+
+# Function to find columns with error % greater than threshold across all statistics
+def find_error_range_columns(df1, df2, threshold=0.02):
+    range_error_columns = set(df1.columns)
+    
+    for stat_func in [calculate_mean, calculate_median, calculate_std, calculate_skewness, calculate_kurtosis]:
+        stat_df1, stat_df2 = stat_func(df1, df2)
+        error_diff = abs((stat_df1 - stat_df2) / stat_df1)
+        # Columns where error is >= threshold
+        range_error_cols = error_diff[(error_diff >= threshold)].index
+        range_error_columns.intersection_update(set(range_error_cols))  # Keep only common range-error columns
+    
+    # Print results
+    if range_error_columns:
+        print(f"\nColumns with Error Greater than {threshold} Across All Statistics:")
+        for col in sorted(range_error_columns):
+            print(f"- {col}")
+    else:
+        print(f"\nNo columns have error greater than {threshold} across all statistics.")
+    
+    return range_error_columns
+
 def train_model(df, model, epochs=10, job_name=None):
     X, y = prepare_training_data(df)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -255,68 +319,6 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     
     print(f"Plot saved to S3: s3://{BUCKET_NAME}/{s3_chart_key}")
 
-# Function to calculate mean
-def calculate_mean(df1, df2):
-    return df1.mean(), df2.mean()
-
-# Function to calculate median
-def calculate_median(df1, df2):
-    return df1.median(), df2.median()
-
-# Function to calculate standard deviation
-def calculate_std(df1, df2):
-    return df1.std(), df2.std()
-
-# Function to calculate skewness
-def calculate_skewness(df1, df2):
-    return df1.apply(lambda x: skew(x, nan_policy='omit')), df2.apply(lambda x: skew(x, nan_policy='omit'))
-
-# Function to calculate kurtosis
-def calculate_kurtosis(df1, df2):
-    return df1.apply(lambda x: kurtosis(x, nan_policy='omit')), df2.apply(lambda x: kurtosis(x, nan_policy='omit'))
-
-# Function to calculate Chi-Square Test for categorical data
-def calculate_chi_square(df1, df2, cat_column1, cat_column2):
-    # Create contingency tables for both DataFrames
-    contingency_table1 = pd.crosstab(df1[cat_column1], df1[cat_column2])
-    contingency_table2 = pd.crosstab(df2[cat_column1], df2[cat_column2])
-    
-    # Perform Chi-Square test for both
-    chi2_stat1, p_value1, dof1, expected1 = chi2_contingency(contingency_table1)
-    chi2_stat2, p_value2, dof2, expected2 = chi2_contingency(contingency_table2)
-    
-    # Return the results
-    return {
-        "Chi2 Statistic (df)": chi2_stat1,
-        "P-value (df)": p_value1,
-        "Degrees of Freedom (df)": dof1,
-        "Expected Frequencies (df)": expected1,
-        "Chi2 Statistic (new df)": chi2_stat2,
-        "P-value (new df)": p_value2,
-        "Degrees of Freedom (new df)": dof2,
-        "Expected Frequencies (new df)": expected2
-    }
-
-# Function to find columns with error % greater than threshold across all statistics
-def find_error_range_columns(df1, df2, threshold=0.02):
-    range_error_columns = set(df1.columns)
-    
-    for stat_func in [calculate_mean, calculate_median, calculate_std, calculate_skewness, calculate_kurtosis]:
-        stat_df1, stat_df2 = stat_func(df1, df2)
-        error_diff = abs((stat_df1 - stat_df2) / stat_df1)
-        # Columns where error is >= threshold
-        range_error_cols = error_diff[(error_diff >= threshold)].index
-        range_error_columns.intersection_update(set(range_error_cols))  # Keep only common range-error columns
-    
-    # Print results
-    if range_error_columns:
-        print(f"\nColumns with Error Greater than {threshold} Across All Statistics:")
-        for col in sorted(range_error_columns):
-            print(f"- {col}")
-    else:
-        print(f"\nNo columns have error greater than {threshold} across all statistics.")
-    
-    return range_error_columns
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
