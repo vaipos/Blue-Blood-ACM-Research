@@ -162,35 +162,41 @@ def train_model(df, model, epochs=10, job_name=None):
 
     # Perform the statistical analysis and print the results:
 
-    print("Mean Comparison between y_test and y_pred:")
-    mean_df, mean_new_df = calculate_mean(y_val, y_pred)
-    print("y_test Mean:\n", mean_df)
-    print("y_pred Mean:\n", mean_new_df)
+    for i in range(len(y_pred)):
+        df1 = pd.DataFrame(y_val[i])
+        df2 = pd.DataFrame(y_pred[i])
 
-    print("\nMedian Comparison between y_test and y_pred:")
-    median_df, median_new_df = calculate_median(y_val, y_pred)
-    print("y_test Median:\n", median_df)
-    print("y_pred Median:\n", median_new_df)
+        print(f"\nSample {i} Comparison:")
+        find_error_range_columns(df1, df2, 0.02)
 
-    print("\nStandard Deviation Comparison between y_test and y_pred:")
-    std_df, std_new_df = calculate_std(y_val, y_pred)
-    print("y_test Standard Deviation:\n", std_df)
-    print("y_pred Standard Deviation:\n", std_new_df)
+        # print("Mean Comparison for sample ", i)
+        # mean_val, mean_pred = calculate_mean(df1, df2)
+        # print(f"y_val Mean: \n{mean_val}")
+        # print(f"y_pred Mean: \n{mean_pred}")
 
-    print("\nSkewness Comparison between y_test and y_pred:")
-    skew_df, skew_new_df = calculate_skewness(y_val, y_pred)
-    print("y_test Skewness:\n", skew_df)
-    print("y_pred Skewness:\n", skew_new_df)
+        # print("\nMedian Comparison for sample ", i)
+        # median_val, median_pred = calculate_median(df1, df2)
+        # print(f"y_val Median: \n{median_val}")
+        # print(f"y_pred Median: \n{median_pred}")
 
-    print("\nKurtosis Comparison between y_test and y_pred:")
-    kurt_df, kurt_new_df = calculate_kurtosis(y_val, y_pred)
-    print("y_test Kurtosis:\n", kurt_df)
-    print("y_pred Kurtosis:\n", kurt_new_df)
+        # print("\nStandard Deviation Comparison for sample ", i)
+        # std_val, std_pred = calculate_std(df1, df2)
+        # print(f"y_val Std: \n{std_val}")
+        # print(f"y_pred Std: \n{std_pred}")
 
-    # If you have categorical columns, you can perform the Chi-Square test for both DataFrames
-    print("\nChi-Square Test between prescription_dose_val_rx and prescription_dose_unit_rx:")
-    chi_square_results = calculate_chi_square(y_val, y_pred, 'prescription_dose_val_rx', 'prescription_dose_unit_rx')
-    print(chi_square_results)
+        # print("\nSkewness Comparison for sample ", i)
+        # skew_val, skew_pred = calculate_skewness(df1, df2)
+        # print(f"y_val Skewness: \n{skew_val}")
+        # print(f"y_pred Skewness: \n{skew_pred}")
+
+        # print("\nKurtosis Comparison for sample ", i)
+        # kurt_val, kurt_pred = calculate_kurtosis(df1, df2)
+        # print(f"y_val Kurtosis: \n{kurt_val}")
+        # print(f"y_pred Kurtosis: \n{kurt_pred}")
+
+        # print("\nChi-Square Test for sample ", i)
+        # chi_square_results = calculate_chi_square(df1, df2, 'prescription_dose_val_rx', 'prescription_dose_unit_rx')
+        # print(f"Chi-Square Results: {chi_square_results}")
 
     logger.info(f"History: {history.history}")
     
@@ -290,6 +296,27 @@ def calculate_chi_square(df1, df2, cat_column1, cat_column2):
         "Degrees of Freedom (new df)": dof2,
         "Expected Frequencies (new df)": expected2
     }
+
+# Function to find columns with error % greater than threshold across all statistics
+def find_error_range_columns(df1, df2, threshold=0.02):
+    range_error_columns = set(df1.columns)
+    
+    for stat_func in [calculate_mean, calculate_median, calculate_std, calculate_skewness, calculate_kurtosis]:
+        stat_df1, stat_df2 = stat_func(df1, df2)
+        error_diff = abs((stat_df1 - stat_df2) / stat_df1)
+        # Columns where error is >= threshold
+        range_error_cols = error_diff[(error_diff >= threshold)].index
+        range_error_columns.intersection_update(set(range_error_cols))  # Keep only common range-error columns
+    
+    # Print results
+    if range_error_columns:
+        print(f"\nColumns with Error Greater than {threshold} Across All Statistics:")
+        for col in sorted(range_error_columns):
+            print(f"- {col}")
+    else:
+        print(f"\nNo columns have error greater than {threshold} across all statistics.")
+    
+    return range_error_columns
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

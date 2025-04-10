@@ -30,7 +30,7 @@ Notebook for automated hyperparameter tuning of LSTM models using AWS SageMaker.
   - Framework: TensorFlow 2.9
   - Python version: 3.9
 
-### `train.py` (stat tests don't work yet)
+### `train.py` (stat tests haven't been tested from sagemaker)
 TensorFlow script for training an LSTM model on AWS SageMaker.
 - **Key Functions:**
   - `clean_and_convert()`: Preprocesses embedding strings to numpy arrays
