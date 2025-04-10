@@ -5,6 +5,13 @@ This project uses machine learning to predict post-treatment blood profiles base
 
 ## Files
 
+### `model_testing.ipynb`(currently being used to test out stat tests)
+Basically just the local version of train.py
+**Newest Updates**
+  - some stat tests added and working
+  - stat tests run for each row of y_pred and y_val
+  - columns where error exceeds 2% are being printed
+
 ### `hyperparam-loop.ipynb`
 Notebook for automated hyperparameter tuning of LSTM models using AWS SageMaker.
 - **Features:**
@@ -23,7 +30,7 @@ Notebook for automated hyperparameter tuning of LSTM models using AWS SageMaker.
   - Framework: TensorFlow 2.9
   - Python version: 3.9
 
-### `train.py`
+### `train.py` (stat tests don't work yet)
 TensorFlow script for training an LSTM model on AWS SageMaker.
 - **Key Functions:**
   - `clean_and_convert()`: Preprocesses embedding strings to numpy arrays
@@ -88,9 +95,6 @@ Notebook for configuring and executing AWS SageMaker training jobs.
 3. Train LSTM model to predict post-treatment values from pre-treatment and prescription data
 4. Validate performance against test data
 5. Save model and performance metrics (not yet)
-
-### `model_testing.ipynb`
-Basically just the local version of train.py
 
 ### `preprocessing.ipynb`
 Preprocessing steps taken to get from original data to final_df.csv
