@@ -8,11 +8,14 @@ from ctgan import CTGAN
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=300)
-    parser.add_argument('--batch-size', type=int, default=500)
+    parser.add_argument('--epochs', type=int, default=600)
+    parser.add_argument('--batch-size', type=int, default=512)
     parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', './output'))
     parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
     parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', ''))
+    #added
+   
+
     return parser.parse_args()
 
 def clean_and_convert(x):
@@ -59,6 +62,8 @@ def main():
     model = CTGAN(
         epochs=args.epochs,
         batch_size=args.batch_size,
+        generator_lr=args.lr,
+        discriminator_lr=args.lr,
         verbose=True
     )
 
