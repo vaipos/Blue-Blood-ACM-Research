@@ -8,93 +8,66 @@ import json
 import boto3
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
+from keras.layers import LSTM, Dense, Dropout, Bidirectional
+from keras.callbacks import EarlyStopping
 import logging
 import pickle
 import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from scipy.stats import chi2_contingency
-from scipy.stats import skew, kurtosis
+from scipy.stats import chi2_contingency, skew, kurtosis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BUCKET_NAME = "blue-blood-data"
 
+def get_presc_cols(df):
+    presc_cols = []
 
-def clean_and_convert(x):
-    if isinstance(x, np.ndarray):  # If already a NumPy array, return as-is
-        return x
-    if isinstance(x, str):  # Only process strings
-        try:
-            x = re.sub(r'[\[\]]', '', x)  # Remove square brackets
-            cleaned = re.sub(r'\s+', ' ', x.strip())  # Remove extra spaces
-            return np.array([float(i) for i in cleaned.split(' ')])  # Convert to NumPy array
-        except Exception as e:
-            return x  # Return original value in case of error
-    return x  # If NaN or unexpected type, return as-is
+    for col in df.columns:
+        # check if column starts with 'P'
+        if col.startswith('P'):
+            presc_cols.append(col)
 
-def get_unique_pairs(df):
-    subject_ids = df['subject_id'].unique()
-    patient_date_pairs = {id: set() for id in subject_ids}
+    presc_cols.append('prescription_dose_val_rx')
+    presc_cols.append('prescription_dose_unit_rx')
 
-    for subj in subject_ids:
-        df[df['subject_id'] == subj]['prescription_start'].apply(lambda x: patient_date_pairs[subj].add(x))
-        # convert set to list
-        patient_date_pairs[subj] = list(patient_date_pairs[subj])
-    return patient_date_pairs
+    return presc_cols
 
 def get_presc_input(df):
+    presc_cols = get_presc_cols(df)
+
     prescriptions = []
         
     # Iterate through rows of the DataFrame
     for _, row in df.iterrows():
         # Extract values from each row
-        presc = row['prescription_rx_embeddings']
-        dose_val = row['prescription_dose_val_rx']
-        dose_unit = row['prescription_dose_unit_rx']
-        
-        # Concatenate the prescription embedding with the dose value and unit
-        combined = np.concatenate((presc, np.array([dose_val, dose_unit])))
-        prescriptions.append(combined)
+        presc = np.array(row[presc_cols].values)
+        prescriptions.append(presc)
     
-    # Convert list to numpy array
     prescriptions = np.array(prescriptions)
+    print(prescriptions.shape)
 
     return prescriptions
 
-def add_padding(prescriptions, pre_treatment, post_treatment):
-    # reshape pre_treatment and post_treatment to be 2D arrays
-    pre_treatment = pre_treatment.reshape(1, -1)
-    post_treatment = post_treatment.reshape(1, -1)
+def add_padding(pre_treatment, post_treatment):
+    # Compute the number of zeros to pad (130 - current length)
+    pad_width = 130 - pre_treatment.shape[0]
+    padded_pre_treatment = np.pad(pre_treatment, (0, pad_width), mode='constant')
+    pad_width = 130 - post_treatment.shape[0]
+    padded_post_treatment = np.pad(post_treatment, (0, pad_width), mode='constant')
     
-    # Pad or truncate to 20 rows
-    if prescriptions.shape[0] < 20:
-        # Pad with zeros to reach 20 rows
-        prescriptions = np.pad(prescriptions, ((0, 20 - prescriptions.shape[0]), (0, 0)), mode='constant')
-    elif prescriptions.shape[0] > 20:
-        # Truncate to 20 rows
-        prescriptions = prescriptions[:20, :]
-    
-    # Pad pre_treatment and post_treatment to 20 rows
-    pre_treatment = np.pad(pre_treatment, ((0, 19), (0, 0)), mode='constant')  # pad to (20, 25)
-    post_treatment = np.pad(post_treatment, ((0, 19), (0, 0)), mode='constant')  # pad to (20, 25)
-    
-    # Now pad columns to reach 180 features for each
-    padded_prescriptions = np.pad(prescriptions, ((0, 0), (0, 0)), mode='constant')
-    padded_pre_treatment = np.pad(pre_treatment, ((0, 0), (0, 105)), mode='constant')
-    padded_post_treatment = np.pad(post_treatment, ((0, 0), (0, 105)), mode='constant') 
-    
-    return padded_prescriptions, padded_pre_treatment, padded_post_treatment
+    return padded_pre_treatment, padded_post_treatment
 
-def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
+def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.01):
     model = Sequential([
-        TimeDistributed(Flatten(), input_shape=(3, 20, 130)),
-        LSTM(lstm_units, return_sequences=False),
-        Dropout(dropout_rate),
-        Dense(20 * 130, activation="linear"),
-        Reshape((20, 130))
+        Bidirectional(LSTM(64, return_sequences=True), input_shape=(3, 130)),
+        Dropout(0.2),
+        LSTM(64 // 2, return_sequences=False),
+        Dropout(0.2),
+        Dense(32, activation="relu"),
+        Dense(130)
     ])
 
     # Compile the model with specified learning rate
@@ -103,62 +76,40 @@ def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     return model
 
 def prepare_training_data(df):
-    # Clean and convert the DataFrame
-    df['prescription_rx_embeddings'] = df['prescription_rx_embeddings'].apply(clean_and_convert)
-
-    # Get unique patient/date pairs
-    patient_date_pairs = get_unique_pairs(df)
-    
     X_train_list = []
     y_train_list = []
-    
-    # Iterate through the patient/date pairs
-    for patient in patient_date_pairs:
-        for date in patient_date_pairs[patient]:
-            # Get the data for the current patient/date pair
-            patient_data = df[(df['subject_id'] == patient) & (df['prescription_start'] == date)]
-            
-            if len(patient_data) == 0:
-                continue
-                
-            # Drop unnecessary columns for processing
-            processing_data = patient_data.drop(['subject_id', 'prescription_start', 'pre_charttime', 'post_charttime'], axis=1)
-            
-            # Get the prescription input (2DArray with shape (num_prescriptions, 130))
-            prescriptions = get_presc_input(processing_data)
-            
-            # pre_treatment and post_treatment are 1D arrays
-            pre_treatment = np.array(processing_data[[col for col in processing_data.columns if col.startswith('pre_')]].values[0])
-            post_treatment = np.array(processing_data[[col for col in processing_data.columns if col.startswith('post_')]].values[0])
-            
-            # Add padding to the inputs
-            padded_prescriptions, padded_pre_treatment, padded_post_treatment = add_padding(prescriptions, pre_treatment, post_treatment)
-            
-            # Create the full sequence (1 patient, 3 time steps, 180 features)
-            X = np.array([[
-                padded_pre_treatment,     # Time Step 1: Pre-Treatment
-                padded_prescriptions,     # Time Step 2: Prescription
-                padded_post_treatment     # Time Step 3: Post-Treatment
-            ]])
-            
-            y = X[:, -1, :]  # Target is the last time step (Post-Treatment)
-            
-            X_train_list.append(X[0])
-            y_train_list.append(y[0])
+
+    presc_cols = get_presc_cols(df)
+
+    # for each row in the df
+    for _, row in df.iterrows():
+        # Extract pre_treatment and post_treatment from the current row
+        pre_cols = [col for col in df.columns if col.startswith('pre_')]
+        post_cols = [col for col in df.columns if col.startswith('post_')]
+        
+        # Get values for the current row
+        pre_treatment = np.array(row[pre_cols].values)
+        post_treatment = np.array(row[post_cols].values)
+        
+        # Get prescription data for current row (assuming this is already defined elsewhere)
+        prescriptions = np.array(row[presc_cols].values)
+        
+        # Add padding to the inputs
+        padded_pre_treatment, padded_post_treatment = add_padding(pre_treatment, post_treatment)
+        
+        # Create the full sequence (1 patient, 3 time steps, 130 features)
+        X = np.array([[
+            padded_pre_treatment,     # Time Step 1: Pre-Treatment
+            prescriptions,            # Time Step 2: Prescription
+            padded_post_treatment     # Time Step 3: Post-Treatment
+        ]])
+        
+        y = X[:, -1, :]  # Target is the last time step (Post-Treatment)
+        
+        X_train_list.append(X[0])
+        y_train_list.append(y[0])
     
     return np.array(X_train_list), np.array(y_train_list)
-
-# Function to calculate mean
-def calculate_mean(df1, df2):
-    return df1.mean(), df2.mean()
-
-# Function to calculate median
-def calculate_median(df1, df2):
-    return df1.median(), df2.median()
-
-# Function to calculate standard deviation
-def calculate_std(df1, df2):
-    return df1.std(), df2.std()
 
 # Function to calculate skewness
 def calculate_skewness(df1, df2):
@@ -168,99 +119,25 @@ def calculate_skewness(df1, df2):
 def calculate_kurtosis(df1, df2):
     return df1.apply(lambda x: kurtosis(x, nan_policy='omit')), df2.apply(lambda x: kurtosis(x, nan_policy='omit'))
 
-# Function to calculate Chi-Square Test for categorical data
-def calculate_chi_square(df1, df2, cat_column1, cat_column2):
-    # Create contingency tables for both DataFrames
-    contingency_table1 = pd.crosstab(df1[cat_column1], df1[cat_column2])
-    contingency_table2 = pd.crosstab(df2[cat_column1], df2[cat_column2])
-    
-    # Perform Chi-Square test for both
-    chi2_stat1, p_value1, dof1, expected1 = chi2_contingency(contingency_table1)
-    chi2_stat2, p_value2, dof2, expected2 = chi2_contingency(contingency_table2)
-    
-    # Return the results
-    return {
-        "Chi2 Statistic (df)": chi2_stat1,
-        "P-value (df)": p_value1,
-        "Degrees of Freedom (df)": dof1,
-        "Expected Frequencies (df)": expected1,
-        "Chi2 Statistic (new df)": chi2_stat2,
-        "P-value (new df)": p_value2,
-        "Degrees of Freedom (new df)": dof2,
-        "Expected Frequencies (new df)": expected2
-    }
-
-# Function to find columns with error % greater than threshold across all statistics
-def find_error_range_columns(df1, df2, threshold=0.02):
-    range_error_columns = set(df1.columns)
-    
-    for stat_func in [calculate_mean, calculate_median, calculate_std, calculate_skewness, calculate_kurtosis]:
-        stat_df1, stat_df2 = stat_func(df1, df2)
-        error_diff = abs((stat_df1 - stat_df2) / stat_df1)
-        # Columns where error is >= threshold
-        range_error_cols = error_diff[(error_diff >= threshold)].index
-        range_error_columns.intersection_update(set(range_error_cols))  # Keep only common range-error columns
-    
-    # Print results
-    if range_error_columns:
-        print(f"\nColumns with Error Greater than {threshold} Across All Statistics:")
-        for col in sorted(range_error_columns):
-            print(f"- {col}")
-    else:
-        print(f"\nNo columns have error greater than {threshold} across all statistics.")
-    
-    return range_error_columns
-
 def train_model(df, model, epochs=10, job_name=None):
     X, y = prepare_training_data(df)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    early_stop = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    )
 
     history = model.fit(
         X_train, y_train, 
         epochs=epochs, 
         batch_size=1, 
-        validation_data=(X_val, y_val)
+        validation_data=(X_val, y_val),
+        callbacks=[early_stop]
     )
 
     y_pred = model.predict(X_val)
-
-    # Perform the statistical analysis and print the results:
-
-    for i in range(len(y_pred)):
-        df1 = pd.DataFrame(y_val[i])
-        df2 = pd.DataFrame(y_pred[i])
-
-        print(f"\nSample {i} Comparison:")
-        find_error_range_columns(df1, df2, 0.02)
-
-        # print("Mean Comparison for sample ", i)
-        # mean_val, mean_pred = calculate_mean(df1, df2)
-        # print(f"y_val Mean: \n{mean_val}")
-        # print(f"y_pred Mean: \n{mean_pred}")
-
-        # print("\nMedian Comparison for sample ", i)
-        # median_val, median_pred = calculate_median(df1, df2)
-        # print(f"y_val Median: \n{median_val}")
-        # print(f"y_pred Median: \n{median_pred}")
-
-        # print("\nStandard Deviation Comparison for sample ", i)
-        # std_val, std_pred = calculate_std(df1, df2)
-        # print(f"y_val Std: \n{std_val}")
-        # print(f"y_pred Std: \n{std_pred}")
-
-        # print("\nSkewness Comparison for sample ", i)
-        # skew_val, skew_pred = calculate_skewness(df1, df2)
-        # print(f"y_val Skewness: \n{skew_val}")
-        # print(f"y_pred Skewness: \n{skew_pred}")
-
-        # print("\nKurtosis Comparison for sample ", i)
-        # kurt_val, kurt_pred = calculate_kurtosis(df1, df2)
-        # print(f"y_val Kurtosis: \n{kurt_val}")
-        # print(f"y_pred Kurtosis: \n{kurt_pred}")
-
-        # print("\nChi-Square Test for sample ", i)
-        # chi_square_results = calculate_chi_square(df1, df2, 'prescription_dose_val_rx', 'prescription_dose_unit_rx')
-        # print(f"Chi-Square Results: {chi_square_results}")
 
     logger.info(f"History: {history.history}")
     
@@ -341,7 +218,7 @@ if __name__ == '__main__':
     
     # Load training data
     print(f"Loading data from {args.train}")
-    df = pd.read_csv(os.path.join(args.train, 'final_df.csv'))
+    df = pd.read_csv(os.path.join(args.train, 'synthetic_data.csv'))
     
     # Build model with specified hyperparameters
     print("Building model...")
