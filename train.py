@@ -72,7 +72,7 @@ def add_padding(pre_treatment, post_treatment):
     
     return padded_pre_treatment, padded_post_treatment
 
-def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001, learning_rate=0.001):
+def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     model = Sequential([
         Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(3, 130)),
         Dropout(0.2),
@@ -133,18 +133,9 @@ def train_model(df, model, epochs=10, job_name=None):
         restore_best_weights=True
     )
 
-    early_stop = EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        restore_best_weights=True
-    )
-
     history = model.fit(
         X_train, y_train, 
         epochs=epochs, 
-        batch_size=1, 
-        validation_data=(X_val, y_val),
-        callbacks=[early_stop]
         batch_size=1, 
         validation_data=(X_val, y_val),
         callbacks=[early_stop]
