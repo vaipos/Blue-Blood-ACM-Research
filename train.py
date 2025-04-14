@@ -280,21 +280,21 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
 
     #MD File Contents
     markdown = f"""# Model Performance Evaluation Report
-        ## Hyperparameter Configuration:
-        - **Epochs** : {epochs}
-        - **LSTM Units** : {lstm_units}
-        - **Dropout Rate** : {dropout_rate}
-        - **Learning Rate** : {learning_rate}
+    ## Hyperparameter Configuration:
+    - **Epochs** : {epochs}
+    - **LSTM Units** : {lstm_units}
+    - **Dropout Rate** : {dropout_rate}
+    - **Learning Rate** : {learning_rate}
 
-        ## Unweighted Metrics
-        - **Mean Square Error**  : {mse:.9f}
-        - **RMSE** : {rmse:.9f}
-        - **MAE**  : {mae:.9f}
+    ## Unweighted Metrics
+    - **Mean Square Error**  : {mse:.9f}
+    - **RMSE** : {rmse:.9f}
+    - **MAE**  : {mae:.9f}
 
-        ## Weighted Metrics
-        - **Weighted MSE**  : {weighted_mse:.9f}
-        - **Weighted RMSE** : {weighted_rmse:.9f}
-        - **Weighted MAE**  : {weighted_mae:.9f}
+    ## Weighted Metrics
+    - **Weighted MSE**  : {weighted_mse:.9f}
+    - **Weighted RMSE** : {weighted_rmse:.9f}
+    - **Weighted MAE**  : {weighted_mae:.9f}
     """
 
     # Upload to S3
