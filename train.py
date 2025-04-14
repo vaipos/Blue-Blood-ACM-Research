@@ -1,3 +1,8 @@
+'''
+- get model to predict based on pre-treatment cbc and rx data --> 57 predictions, of 20rows 130 columsn each....
+- 
+'''
+
 import os
 import argparse
 import pandas as pd
@@ -10,12 +15,19 @@ import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout, Bidirectional
 from keras.callbacks import EarlyStopping
+from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
+from keras.callbacks import EarlyStopping
 import logging
 import pickle
 import matplotlib
 import matplotlib.pyplot as plt
+
 from sklearn.model_selection import train_test_split
-from scipy.stats import chi2_contingency, skew, kurtosis
+from sklearn.metrics import mean_squared_error
+
+
+#AWS Credentials
+BUCKET_NAME = "blue-blood-data"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,12 +72,12 @@ def add_padding(pre_treatment, post_treatment):
     
     return padded_pre_treatment, padded_post_treatment
 
-def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.01):
+def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001, learning_rate=0.001):
     model = Sequential([
-        Bidirectional(LSTM(64, return_sequences=True), input_shape=(3, 130)),
+        Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(3, 130)),
         Dropout(0.2),
-        LSTM(64 // 2, return_sequences=False),
-        Dropout(0.2),
+        LSTM(lstm_units // 2, return_sequences=False),
+        Dropout(dropout_rate),
         Dense(32, activation="relu"),
         Dense(130)
     ])
@@ -111,14 +123,6 @@ def prepare_training_data(df):
     
     return np.array(X_train_list), np.array(y_train_list)
 
-# Function to calculate skewness
-def calculate_skewness(df1, df2):
-    return df1.apply(lambda x: skew(x, nan_policy='omit')), df2.apply(lambda x: skew(x, nan_policy='omit'))
-
-# Function to calculate kurtosis
-def calculate_kurtosis(df1, df2):
-    return df1.apply(lambda x: kurtosis(x, nan_policy='omit')), df2.apply(lambda x: kurtosis(x, nan_policy='omit'))
-
 def train_model(df, model, epochs=10, job_name=None):
     X, y = prepare_training_data(df)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -129,9 +133,18 @@ def train_model(df, model, epochs=10, job_name=None):
         restore_best_weights=True
     )
 
+    early_stop = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    )
+
     history = model.fit(
         X_train, y_train, 
         epochs=epochs, 
+        batch_size=1, 
+        validation_data=(X_val, y_val),
+        callbacks=[early_stop]
         batch_size=1, 
         validation_data=(X_val, y_val),
         callbacks=[early_stop]
@@ -149,17 +162,25 @@ def train_model(df, model, epochs=10, job_name=None):
     pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
     buf.seek(0)
 
+    
+    s3_model_path = f"models/{job_name}/lstm_model.pkl"
+    s3_chart_path = f"models/{job_name}/training-validation-loss.png"
+    
+    # Save the model to in-memory buffer
+    buf = io.BytesIO()
+    pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
+    buf.seek(0)
+
     s3_client = boto3.client("s3")
     
     # Upload the model to S3
     s3_client.upload_fileobj(buf, BUCKET_NAME, s3_model_path)
     logger.info(f"Model successfully uploaded to s3://{BUCKET_NAME}/{s3_model_path}")
 
-    return history.history, s3_model_path, s3_chart_path
+    #return history.history, s3_model_path, s3_chart_path
+    return history.history, s3_model_path, s3_chart_path, X_val, y_val
 
-def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marker='s', job_name=None):
-    print("STARTING CHARTING! \n")
-    
+def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker='s', job_name=None):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
@@ -173,9 +194,6 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     plt.plot(epochs_range, train_loss, label='Train Loss', marker=train_marker)
     if val_loss:
         plt.plot(epochs_range, val_loss, label='Validation Loss', marker=val_marker)
-    
-    print("Creating PLOT \n")
-
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Training vs Validation Loss')
@@ -189,12 +207,90 @@ def chart_model_performance(history, figsize=(8, 6), train_marker='o', val_marke
     buf.seek(0)
     
     s3_chart_key = f"models/{job_name}/training-validation-loss.png"
-
     # Upload to S3
     s3 = boto3.client("s3")
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
     
-    print(f"Plot saved to S3: s3://{BUCKET_NAME}/{s3_chart_key}")
+'''
+Need to look into this again --> check if the way the predicted CBC-actual CBC error is properly being flagged, because the distribution doesn't look right
+'''
+def plot_error_distribution(y_pred, y_val, threshold=0.002):
+    # Force Matplotlib to use a non-GUI backend
+    matplotlib.use("Agg")
+    
+    epsilon = 1e-8  # small value to prevent division by zero
+    relative_error = np.abs(y_pred - y_val) / (np.abs(y_val) + epsilon)
+    error_mask = relative_error > threshold
+    error_counts_per_sample = np.sum(error_mask, axis=(1, 2))
+
+    # Plot histogram
+    plt.figure(figsize=(10, 6))
+    plt.hist(error_counts_per_sample, bins=range(0, np.max(error_counts_per_sample) + 2), edgecolor='black')
+    plt.xlabel(f"Number of Cells Outside {threshold*100:.3f}% Relative Error (per sample)")
+    plt.ylabel("Number of Samples")
+    plt.title('Relative Error Distribution')
+    plt.grid(True)
+
+    # Save plot to in-memory buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    
+    # Upload to S3
+    s3_chart_key = f"models/{job_name}/relative-error-distribution.png"
+    s3 = boto3.client("s3")
+    s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
+
+def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_rate, learning_rate):
+    y_pred = model.predict(X_val)
+
+    # Unweighted Statistical Metrics
+    mse = np.mean((y_pred - y_val) ** 2)
+    rmse = np.sqrt(mse)
+    mae = np.mean(np.abs(y_pred - y_val))
+
+    # Weighted Statistical metrics
+    weights = np.zeros_like(y_val)
+    weights[:, 0, :25] = 1.0
+
+    squared_error = (y_pred - y_val) ** 2
+    abs_error = np.abs(y_pred - y_val)
+
+    weighted_squared_error = squared_error * weights
+    weighted_abs_error = abs_error * weights
+
+    # Weighted metrics
+    weighted_mse = np.sum(weighted_squared_error) / np.sum(weights)
+    weighted_rmse = np.sqrt(weighted_mse)
+    weighted_mae = np.sum(weighted_abs_error) / np.sum(weights)
+
+    #MD File Contents
+    markdown = f"""# Model Performance Evaluation Report
+    ## Hyperparameter Configuration:
+    - **Epochs** : {epochs}
+    - **LSTM Units** : {lstm_units}
+    - **Dropout Rate** : {dropout_rate}
+    - **Learning Rate** : {learning_rate}
+
+    ## Unweighted Metrics
+    - **Mean Square Error**  : {mse:.9f}
+    - **RMSE** : {rmse:.9f}
+    - **MAE**  : {mae:.9f}
+
+    ## Weighted Metrics
+    - **Weighted MSE**  : {weighted_mse:.9f}
+    - **Weighted RMSE** : {weighted_rmse:.9f}
+    - **Weighted MAE**  : {weighted_mae:.9f}
+    """
+
+    # Upload to S3
+    s3_chart_key = f"models/{job_name}/model_evaluation.md"
+    buf = io.BytesIO(markdown.encode("utf-8"))
+    s3 = boto3.client("s3")
+    s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
+
+    return y_pred
 
 
 if __name__ == '__main__':
@@ -202,46 +298,70 @@ if __name__ == '__main__':
     
     # Hyperparameters
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--learning-rate', type=float, default=0.001)
-    parser.add_argument('--lstm-units', type=int, default=64)
-    parser.add_argument('--dropout-rate', type=float, default=0.2)
+    parser.add_argument('--learning_rate', type=float, default=0.001)
+    parser.add_argument('--lstm_units', type=int, default=64)
+    parser.add_argument('--dropout_rate', type=float, default=0.2)
     parser.add_argument("--job_name", type=str)
     
-    # SageMaker parameters
+    # SageMaker paramebters
     parser.add_argument('--model-dir', type=str, default=None, help='Directory to save model artifacts')
     parser.add_argument("--train", type=str, default=os.environ.get("SM_CHANNEL_TRAIN"))
     parser.add_argument("--test", type=str, default=os.environ.get("SM_CHANNEL_TEST"))
-    
     args, _ = parser.parse_known_args()
     
+    # Log job name from environment
     job_name = args.job_name
-    
+
     # Load training data
     print(f"Loading data from {args.train}")
     df = pd.read_csv(os.path.join(args.train, 'synthetic_data.csv'))
     
     # Build model with specified hyperparameters
-    print("Building model...")
+    print("Building & training the model...")
     model = build_model(lstm_units=args.lstm_units, dropout_rate=args.dropout_rate, learning_rate=args.learning_rate)
 
-    # Print model summary to logs
+    # Print Model Summary
     stringlist = []
     model.summary(print_fn=lambda x: stringlist.append(x))
     model_summary = "\n".join(stringlist)
     logger.info(f"Model Summary:\n{model_summary}")
     
-    # Train the model
+    # Model Training
     print("Starting model training...")
-    history, model_path, chart_path = train_model(
+    history, model_path, chart_path, X_val, y_val = train_model(
         df, 
         model, 
         epochs=args.epochs,
         job_name=job_name
     )
-    
-    print("Training complete!")
-    print(f"Model saved to: {model_path}")
-    print("History object:", history)
-    print("Keys:", history.keys())
+    plot_training_val_loss(history, job_name=job_name)
 
-    chart_model_performance(history, job_name=job_name)
+    # Testing & Evaluation
+    y_pred = evaluate_model_performance(model, 
+                                        X_val, 
+                                        y_val, 
+                                        epochs=args.epochs, 
+                                        lstm_units=args.lstm_units, 
+                                        dropout_rate=args.dropout_rate, 
+                                        learning_rate=args.learning_rate)
+    
+
+    #Incorrectly displaying histograms --> get this fixed
+    plot_error_distribution(y_pred, y_val, threshold=0.002)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
