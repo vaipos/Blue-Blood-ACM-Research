@@ -74,15 +74,14 @@ def add_padding(pre_treatment, post_treatment):
 
 def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     model = Sequential([
-        Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(3, 130)),
-        Dropout(0.2),
+        Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(2, 130)),
+        Dropout(dropout_rate),
         LSTM(lstm_units // 2, return_sequences=False),
         Dropout(dropout_rate),
         Dense(32, activation="relu"),
         Dense(130)
     ])
 
-    # Compile the model with specified learning rate
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss='mse')
     return model
@@ -103,23 +102,22 @@ def prepare_training_data(df):
         pre_treatment = np.array(row[pre_cols].values)
         post_treatment = np.array(row[post_cols].values)
         
-        # Get prescription data for current row (assuming this is already defined elsewhere)
+        # Get prescription data for current row
         prescriptions = np.array(row[presc_cols].values)
         
         # Add padding to the inputs
         padded_pre_treatment, padded_post_treatment = add_padding(pre_treatment, post_treatment)
         
-        # Create the full sequence (1 patient, 3 time steps, 130 features)
-        X = np.array([[
-            padded_pre_treatment,     # Time Step 1: Pre-Treatment
-            prescriptions,            # Time Step 2: Prescription
-            padded_post_treatment     # Time Step 3: Post-Treatment
-        ]])
+        # Create the full sequence (now directly using the padded post_treatment as target)
+        X = np.array([
+            padded_pre_treatment,     # Pre-Treatment
+            prescriptions             # Prescription
+        ])
         
-        y = X[:, -1, :]  # Target is the last time step (Post-Treatment)
+        y = padded_post_treatment  
         
-        X_train_list.append(X[0])
-        y_train_list.append(y[0])
+        X_train_list.append(X)
+        y_train_list.append(y)
     
     return np.array(X_train_list), np.array(y_train_list)
 
@@ -205,30 +203,31 @@ def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker
 '''
 Need to look into this again --> check if the way the predicted CBC-actual CBC error is properly being flagged, because the distribution doesn't look right
 '''
-def plot_error_distribution(y_pred, y_val, threshold=0.002):
+def plot_error_distribution(y_pred, y_val, threshold=0.002, job_name=None):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
     epsilon = 1e-8  # small value to prevent division by zero
     relative_error = np.abs(y_pred - y_val) / (np.abs(y_val) + epsilon)
     error_mask = relative_error > threshold
-    error_counts_per_sample = np.sum(error_mask, axis=(1, 2))
+    
+    # Change this line - remove axis=2 since we now have 2D arrays
+    error_counts_per_sample = np.sum(error_mask, axis=1)  # Changed from axis=(1, 2)
 
     # Plot histogram
     plt.figure(figsize=(10, 6))
     plt.hist(error_counts_per_sample, bins=range(0, np.max(error_counts_per_sample) + 2), edgecolor='black')
-    plt.xlabel(f"Number of Cells Outside {threshold*100:.3f}% Relative Error (per sample)")
+    plt.xlabel(f"Number of Features Outside {threshold*100:.3f}% Relative Error (per sample)")
     plt.ylabel("Number of Samples")
     plt.title('Relative Error Distribution')
     plt.grid(True)
 
-    # Save plot to in-memory buffer
+    # Rest of the function remains the same
     buf = io.BytesIO()
     plt.savefig(buf, format="png")
     plt.close()
     buf.seek(0)
     
-    # Upload to S3
     s3_chart_key = f"models/{job_name}/relative-error-distribution.png"
     s3 = boto3.client("s3")
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
@@ -243,7 +242,7 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
 
     # Weighted Statistical metrics
     weights = np.zeros_like(y_val)
-    weights[:, 0, :25] = 1.0
+    weights[:, :25] = 1.0
 
     squared_error = (y_pred - y_val) ** 2
     abs_error = np.abs(y_pred - y_val)
@@ -339,20 +338,5 @@ if __name__ == '__main__':
 
     #Incorrectly displaying histograms --> get this fixed
     plot_error_distribution(y_pred, y_val, threshold=0.002)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
