@@ -9,3 +9,5 @@ seaborn
 notebook
 ipykernel
 ctgan 
+
+

@@ -8,14 +8,11 @@ from ctgan import CTGAN
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=600)
-    parser.add_argument('--batch-size', type=int, default=512)
+    parser.add_argument('--epochs', type=int, default=300)
+    parser.add_argument('--batch-size', type=int, default=500)
     parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR', './output'))
     parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
     parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', ''))
-    #added
-   
-
     return parser.parse_args()
 
 def clean_and_convert(x):
@@ -54,16 +51,13 @@ def main():
     # Fill any remaining NaNs
     df = df.fillna(0)
 
-    print("Finished preprocessing.")
-    print(df.head())
+    
     # ---- PREPROCESSING ENDS HERE ----
 
     # Train the CTGAN model
     model = CTGAN(
         epochs=args.epochs,
         batch_size=args.batch_size,
-        generator_lr=args.lr,
-        discriminator_lr=args.lr,
         verbose=True
     )
 
@@ -72,9 +66,10 @@ def main():
     print("Training completed.")
 
     # Generate synthetic data
-    synthetic_data = model.sample(100)
+    synthetic_data = model.sample(750)
     print("Synthetic data sample:")
     print(synthetic_data.head())
+
 
     # Save outputs
     os.makedirs(args.output_data_dir, exist_ok=True)
