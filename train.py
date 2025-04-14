@@ -19,7 +19,7 @@ import logging
 import pickle
 import matplotlib
 import matplotlib.pyplot as plt
-
+import collections
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
@@ -231,17 +231,25 @@ def plot_error_distribution(y_pred, y_val, threshold=0.002):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
-    epsilon = 1e-8  # small value to prevent division by zero
+    epsilon = 1e-8  # Keep this as a small value to prevent division by zero
     relative_error = np.abs(y_pred - y_val) / (np.abs(y_val) + epsilon)
-    error_mask = relative_error > threshold
-    error_counts_per_sample = np.sum(error_mask, axis=(1, 2))
+    
+    weights = np.zeros_like(y_val)
+    weights[:, 0, :25] = 1.0  # only valid (non-padded) values
 
-    # Plot histogram
+    error_mask = (relative_error > 0.02) * weights
+    errors_per_sample = np.sum(error_mask, axis=(1, 2))  # shape: (n_samples,)
+
+    error_distribution = collections.Counter(errors_per_sample)
+    
+    x_axis = list(error_distribution.keys())
+    y_axis = list(error_distribution.values())
+
     plt.figure(figsize=(10, 6))
-    plt.hist(error_counts_per_sample, bins=range(0, np.max(error_counts_per_sample) + 2), edgecolor='black')
-    plt.xlabel(f"Number of Cells Outside {threshold*100:.3f}% Relative Error (per sample)")
+    plt.scatter(x_axis, y_axis)
+    plt.xlabel("Number of Errors (per sample)")
     plt.ylabel("Number of Samples")
-    plt.title('Relative Error Distribution')
+    plt.title("Samples vs. Error (Relative Error > 0.2%)")
     plt.grid(True)
 
     # Save plot to in-memory buffer
@@ -280,26 +288,26 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
 
     #MD File Contents
     markdown = f"""# Model Performance Evaluation Report
-    ## Hyperparameter Configuration:
-    - **Epochs** : {epochs}
-    - **LSTM Units** : {lstm_units}
-    - **Dropout Rate** : {dropout_rate}
-    - **Learning Rate** : {learning_rate}
+## Hyperparameter Configuration:
+- **Epochs** : {epochs}
+- **LSTM Units** : {lstm_units}
+- **Dropout Rate** : {dropout_rate}
+- **Learning Rate** : {learning_rate}
 
-    ## Unweighted Metrics
-    - **Mean Square Error**  : {mse:.9f}
-    - **RMSE** : {rmse:.9f}
-    - **MAE**  : {mae:.9f}
+## Unweighted Metrics
+- **Mean Square Error**  : {mse:.9f}
+- **RMSE** : {rmse:.9f}
+- **MAE**  : {mae:.9f}
 
-    ## Weighted Metrics
-    - **Weighted MSE**  : {weighted_mse:.9f}
-    - **Weighted RMSE** : {weighted_rmse:.9f}
-    - **Weighted MAE**  : {weighted_mae:.9f}
+## Weighted Metrics
+- **Weighted MSE**  : {weighted_mse:.9f}
+- **Weighted RMSE** : {weighted_rmse:.9f}
+- **Weighted MAE**  : {weighted_mae:.9f}
     """
 
     # Upload to S3
     s3_chart_key = f"models/{job_name}/model_evaluation.md"
-    buf = io.BytesIO(markdown.encode("utf-8"))
+    buf = io.BytesIO(markdown.encode("utf-8"))  
     s3 = boto3.client("s3")
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
 
