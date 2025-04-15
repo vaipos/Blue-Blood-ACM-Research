@@ -7,12 +7,13 @@ import os
 import argparse
 import pandas as pd
 import numpy as np
-import re
 import io
-import json
+import collections
 import boto3
 import tensorflow as tf
 from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout, Bidirectional
+from keras.callbacks import EarlyStopping
 from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
 from keras.callbacks import EarlyStopping
 import logging
@@ -30,129 +31,92 @@ BUCKET_NAME = "blue-blood-data"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def clean_and_convert(x):
-    if isinstance(x, np.ndarray):  # If already a NumPy array, return as-is
-        return x
-    if isinstance(x, str):  # Only process strings
-        try:
-            x = re.sub(r'[\[\]]', '', x)  # Remove square brackets
-            cleaned = re.sub(r'\s+', ' ', x.strip())  # Remove extra spaces
-            return np.array([float(i) for i in cleaned.split(' ')])  # Convert to NumPy array
-        except Exception as e:
-            return x  # Return original value in case of error
-    return x  # If NaN or unexpected type, return as-is
+BUCKET_NAME = "blue-blood-data"
 
-def get_unique_pairs(df):
-    subject_ids = df['subject_id'].unique()
-    patient_date_pairs = {id: set() for id in subject_ids}
+def get_presc_cols(df):
+    presc_cols = []
 
-    for subj in subject_ids:
-        df[df['subject_id'] == subj]['prescription_start'].apply(lambda x: patient_date_pairs[subj].add(x))
-        # convert set to list
-        patient_date_pairs[subj] = list(patient_date_pairs[subj])
-    return patient_date_pairs
+    for col in df.columns:
+        # check if column starts with 'P'
+        if col.startswith('P'):
+            presc_cols.append(col)
+
+    presc_cols.append('prescription_dose_val_rx')
+    presc_cols.append('prescription_dose_unit_rx')
+
+    return presc_cols
 
 def get_presc_input(df):
+    presc_cols = get_presc_cols(df)
+
     prescriptions = []
         
     # Iterate through rows of the DataFrame
     for _, row in df.iterrows():
         # Extract values from each row
-        presc = row['prescription_rx_embeddings']
-        dose_val = row['prescription_dose_val_rx']
-        dose_unit = row['prescription_dose_unit_rx']
-        
-        # Concatenate the prescription embedding with the dose value and unit
-        combined = np.concatenate((presc, np.array([dose_val, dose_unit])))
-        prescriptions.append(combined)
+        presc = np.array(row[presc_cols].values)
+        prescriptions.append(presc)
     
-    # Convert list to numpy array
     prescriptions = np.array(prescriptions)
+    print(prescriptions.shape)
 
     return prescriptions
 
-# function that adds the proper padding to our input arrays
-def add_padding(prescriptions, pre_treatment, post_treatment):
-    # reshape pre_treatment and post_treatment to be 2D arrays
-    pre_treatment = pre_treatment.reshape(1, -1)
-    post_treatment = post_treatment.reshape(1, -1)
+def add_padding(pre_treatment, post_treatment):
+    # Compute the number of zeros to pad (130 - current length)
+    pad_width = 130 - pre_treatment.shape[0]
+    padded_pre_treatment = np.pad(pre_treatment, (0, pad_width), mode='constant')
+    pad_width = 130 - post_treatment.shape[0]
+    padded_post_treatment = np.pad(post_treatment, (0, pad_width), mode='constant')
     
-    # Pad or truncate to 20 rows
-    if prescriptions.shape[0] < 20:
-        # Pad with zeros to reach 20 rows
-        prescriptions = np.pad(prescriptions, ((0, 20 - prescriptions.shape[0]), (0, 0)), mode='constant')
-    elif prescriptions.shape[0] > 20:
-        # Truncate to 20 rows
-        prescriptions = prescriptions[:20, :]
-    
-    # Pad pre_treatment and post_treatment to 20 rows
-    pre_treatment = np.pad(pre_treatment, ((0, 19), (0, 0)), mode='constant')  # pad to (20, 25)
-    post_treatment = np.pad(post_treatment, ((0, 19), (0, 0)), mode='constant')  # pad to (20, 25)
-    
-    # Now pad columns to reach 180 features for each
-    padded_prescriptions = np.pad(prescriptions, ((0, 0), (0, 0)), mode='constant')
-    padded_pre_treatment = np.pad(pre_treatment, ((0, 0), (0, 105)), mode='constant')
-    padded_post_treatment = np.pad(post_treatment, ((0, 0), (0, 105)), mode='constant') 
-    
-    return padded_prescriptions, padded_pre_treatment, padded_post_treatment
+    return padded_pre_treatment, padded_post_treatment
 
 def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     model = Sequential([
-        TimeDistributed(Flatten(), input_shape=(3, 20, 130)),
-        LSTM(lstm_units, return_sequences=False),
+        Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(2, 130)),
         Dropout(dropout_rate),
-        Dense(20 * 130, activation="linear"),
-        Reshape((20, 130))
+        LSTM(lstm_units // 2, return_sequences=False),
+        Dropout(dropout_rate),
+        Dense(32, activation="relu"),
+        Dense(130)
     ])
 
-    # Compile the model with specified learning rate
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss='mse')
     return model
 
 def prepare_training_data(df):
-    # Clean and convert the DataFrame
-    df['prescription_rx_embeddings'] = df['prescription_rx_embeddings'].apply(clean_and_convert)
-
-    # Get unique patient/date pairs
-    patient_date_pairs = get_unique_pairs(df)
-    
     X_train_list = []
     y_train_list = []
-    
-    # Iterate through the patient/date pairs
-    for patient in patient_date_pairs:
-        for date in patient_date_pairs[patient]:
-            # Get the data for the current patient/date pair
-            patient_data = df[(df['subject_id'] == patient) & (df['prescription_start'] == date)]
-            
-            if len(patient_data) == 0:
-                continue
-                
-            # Drop unnecessary columns for processing
-            processing_data = patient_data.drop(['subject_id', 'prescription_start', 'pre_charttime', 'post_charttime'], axis=1)
-            
-            # Get the prescription input (2DArray with shape (num_prescriptions, 130))
-            prescriptions = get_presc_input(processing_data)
-            
-            # pre_treatment and post_treatment are 1D arrays
-            pre_treatment = np.array(processing_data[[col for col in processing_data.columns if col.startswith('pre_')]].values[0])
-            post_treatment = np.array(processing_data[[col for col in processing_data.columns if col.startswith('post_')]].values[0])
-            
-            # Add padding to the inputs
-            padded_prescriptions, padded_pre_treatment, padded_post_treatment = add_padding(prescriptions, pre_treatment, post_treatment)
-            
-            # Create the full sequence (1 patient, 3 time steps, 180 features)
-            X = np.array([[
-                padded_pre_treatment,     # Time Step 1: Pre-Treatment
-                padded_prescriptions,     # Time Step 2: Prescription
-                padded_post_treatment     # Time Step 3: Post-Treatment
-            ]])
-            
-            y = X[:, -1, :]  # Target is the last time step (Post-Treatment)
-            
-            X_train_list.append(X[0])
-            y_train_list.append(y[0])
+
+    presc_cols = get_presc_cols(df)
+
+    # for each row in the df
+    for _, row in df.iterrows():
+        # Extract pre_treatment and post_treatment from the current row
+        pre_cols = [col for col in df.columns if col.startswith('pre_')]
+        post_cols = [col for col in df.columns if col.startswith('post_')]
+        
+        # Get values for the current row
+        pre_treatment = np.array(row[pre_cols].values)
+        post_treatment = np.array(row[post_cols].values)
+        
+        # Get prescription data for current row
+        prescriptions = np.array(row[presc_cols].values)
+        
+        # Add padding to the inputs
+        padded_pre_treatment, padded_post_treatment = add_padding(pre_treatment, post_treatment)
+        
+        # Create the full sequence (now directly using the padded post_treatment as target)
+        X = np.array([
+            padded_pre_treatment,     # Pre-Treatment
+            prescriptions             # Prescription
+        ])
+        
+        y = padded_post_treatment  
+        
+        X_train_list.append(X)
+        y_train_list.append(y)
     
     return np.array(X_train_list), np.array(y_train_list)
 
@@ -174,7 +138,18 @@ def train_model(df, model, epochs=10, job_name=None):
         callbacks=[early_stop]
     )
 
+    y_pred = model.predict(X_val)
+
     logger.info(f"History: {history.history}")
+    
+    s3_model_path = f"models/{job_name}/lstm_model.pkl"
+    s3_chart_path = f"models/{job_name}/training-validation-loss.png"
+    
+    # Save the model to in-memory buffer
+    buf = io.BytesIO()
+    pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
+    buf.seek(0)
+
     
     s3_model_path = f"models/{job_name}/lstm_model.pkl"
     s3_chart_path = f"models/{job_name}/training-validation-loss.png"
@@ -227,7 +202,7 @@ def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker
 '''
 Need to look into this again --> check if the way the predicted CBC-actual CBC error is properly being flagged, because the distribution doesn't look right
 '''
-def plot_error_distribution(y_pred, y_val, threshold=0.002):
+def plot_error_distribution(y_pred, y_val, threshold=0.002, job_name=None):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
@@ -235,10 +210,10 @@ def plot_error_distribution(y_pred, y_val, threshold=0.002):
     relative_error = np.abs(y_pred - y_val) / (np.abs(y_val) + epsilon)
     
     weights = np.zeros_like(y_val)
-    weights[:, 0, :25] = 1.0  # only valid (non-padded) values
+    weights[:, :25] = 1.0  # only valid (non-padded) values
 
     error_mask = (relative_error > 0.02) * weights
-    errors_per_sample = np.sum(error_mask, axis=(1, 2))  # shape: (n_samples,)
+    errors_per_sample = np.sum(error_mask, axis=1)  # shape: (n_samples,)
 
     error_distribution = collections.Counter(errors_per_sample)
     
@@ -263,7 +238,7 @@ def plot_error_distribution(y_pred, y_val, threshold=0.002):
     s3 = boto3.client("s3")
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
 
-def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_rate, learning_rate):
+def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_rate, learning_rate, job_name=None):
     y_pred = model.predict(X_val)
 
     # Unweighted Statistical Metrics
@@ -273,7 +248,7 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
 
     # Weighted Statistical metrics
     weights = np.zeros_like(y_val)
-    weights[:, 0, :25] = 1.0
+    weights[:, :25] = 1.0
 
     squared_error = (y_pred - y_val) ** 2
     abs_error = np.abs(y_pred - y_val)
@@ -335,7 +310,7 @@ if __name__ == '__main__':
 
     # Load training data
     print(f"Loading data from {args.train}")
-    df = pd.read_csv(os.path.join(args.train, 'final_df.csv'))
+    df = pd.read_csv(os.path.join(args.train, 'synthetic_data.csv'))
     
     # Build model with specified hyperparameters
     print("Building & training the model...")
@@ -364,25 +339,11 @@ if __name__ == '__main__':
                                         epochs=args.epochs, 
                                         lstm_units=args.lstm_units, 
                                         dropout_rate=args.dropout_rate, 
-                                        learning_rate=args.learning_rate)
+                                        learning_rate=args.learning_rate,
+                                        job_name=job_name)
     
 
     #Incorrectly displaying histograms --> get this fixed
-    plot_error_distribution(y_pred, y_val, threshold=0.002)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    plot_error_distribution(y_pred, y_val, threshold=0.002, job_name=job_name)
 
 
