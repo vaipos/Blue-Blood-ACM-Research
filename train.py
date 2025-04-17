@@ -1,37 +1,36 @@
-'''
-- get model to predict based on pre-treatment cbc and rx data --> 57 predictions, of 20rows 130 columsn each....
-- 
-'''
-
+# STL Utils
 import os
-import argparse
-import pandas as pd
-import numpy as np
 import io
+import argparse
+import logging
+import pickle
 import collections
 import boto3
+
+# Data Handling
+import pandas as pd
+import numpy as np
+
+# Model Architecture & Training
 import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout, Bidirectional
+from keras.regularizers import l2
+from sklearn.model_selection import train_test_split
 from keras.callbacks import EarlyStopping
-from keras.layers import LSTM, Dense, Dropout, TimeDistributed, Flatten, Reshape
-from keras.callbacks import EarlyStopping
-import logging
-import pickle
+
+# Statistical Analysis & Plots
 import matplotlib
 import matplotlib.pyplot as plt
 import collections
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-
+from scipy.interpolate import make_interp_spline
 
 #AWS Credentials
 BUCKET_NAME = "blue-blood-data"
 
+# Initialize Logger for Debugging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-BUCKET_NAME = "blue-blood-data"
 
 def get_presc_cols(df):
     presc_cols = []
@@ -73,16 +72,26 @@ def add_padding(pre_treatment, post_treatment):
 
 def build_model(lstm_units=64, dropout_rate=0.2, learning_rate=0.001):
     model = Sequential([
-        Bidirectional(LSTM(lstm_units, return_sequences=True), input_shape=(2, 130)),
-        Dropout(dropout_rate),
-        LSTM(lstm_units // 2, return_sequences=False),
-        Dropout(dropout_rate),
-        Dense(32, activation="relu"),
-        Dense(130)
+        # Read both time steps forwards/backwards
+        Bidirectional(
+            LSTM(
+                lstm_units, 
+                return_sequences=False,
+                kernel_regularizer=l2(0.001)
+            ), 
+            input_shape=(2, 130)
+        ),
+
+        # Force minimum of 0.3 dropout
+        Dropout(max(dropout_rate, 0.3)),
+        
+        # Regularization to favor generalization based on training data, rather than memorization
+        Dense(130, activation='linear', kernel_regularizer=l2(0.001))
     ])
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss='mse')
+
     return model
 
 def prepare_training_data(df):
@@ -138,8 +147,6 @@ def train_model(df, model, epochs=10, job_name=None):
         callbacks=[early_stop]
     )
 
-    y_pred = model.predict(X_val)
-
     logger.info(f"History: {history.history}")
     
     s3_model_path = f"models/{job_name}/lstm_model.pkl"
@@ -150,7 +157,6 @@ def train_model(df, model, epochs=10, job_name=None):
     pickle.dump(model, buf, protocol=pickle.HIGHEST_PROTOCOL)
     buf.seek(0)
 
-    
     s3_model_path = f"models/{job_name}/lstm_model.pkl"
     s3_chart_path = f"models/{job_name}/training-validation-loss.png"
     
@@ -179,9 +185,9 @@ def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker
 
     # Create plot
     plt.figure(figsize=figsize)
-    plt.plot(epochs_range, train_loss, label='Train Loss', marker=train_marker)
+    plt.plot(epochs_range, train_loss, label='Training Loss', marker=train_marker, color='crimson')
     if val_loss:
-        plt.plot(epochs_range, val_loss, label='Validation Loss', marker=val_marker)
+        plt.plot(epochs_range, val_loss, label='Validation Loss', marker=val_marker, color='blue')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Training vs Validation Loss')
@@ -199,33 +205,61 @@ def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker
     s3 = boto3.client("s3")
     s3.upload_fileobj(buf, BUCKET_NAME, s3_chart_key)
     
-'''
-Need to look into this again --> check if the way the predicted CBC-actual CBC error is properly being flagged, because the distribution doesn't look right
-'''
-def plot_error_distribution(y_pred, y_val, threshold=0.002, job_name=None):
+def plot_error_distribution(y_pred, y_val, threshold=0.02, job_name=None):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
-    epsilon = 1e-8  # Keep this as a small value to prevent division by zero
-    relative_error = np.abs(y_pred - y_val) / (np.abs(y_val) + epsilon)
+    epsilon = 1e-8
+    absolute_error = np.abs(y_pred - y_val)
+    relative_error = absolute_error / (np.abs(y_val) + epsilon)
+
+    # Treat small ground truth values differently
+    error_mask = np.where(
+        np.abs(y_val) < 1e-4,  # if ground truth is (close to) 0
+        absolute_error > 0.01,  # then flag if absolute error > 1%
+        relative_error > threshold  # else use relative error
+    )
     
     weights = np.zeros_like(y_val)
     weights[:, :25] = 1.0  # only valid (non-padded) values
 
-    error_mask = (relative_error > 0.02) * weights
+    #error_mask = (relative_error > threshold) * weights
     errors_per_sample = np.sum(error_mask, axis=1)  # shape: (n_samples,)
+
+    per_sample_column_errors = []
+
+    # Iterate over each sample
+    for i in range(y_val.shape[0]):
+        # Only check real data (row 0, columns 0–24)
+        missed_indices = np.where(error_mask[i, :25] == 1)[0]
+        per_sample_column_errors.append(missed_indices.tolist())
+    
+    for i, missed in enumerate(per_sample_column_errors[:5]):
+        print(f"Sample {i} - Columns where Error > 2%: {missed}")
 
     error_distribution = collections.Counter(errors_per_sample)
     
-    x_axis = list(error_distribution.keys())
-    y_axis = list(error_distribution.values())
+    x_vals = np.array(sorted(error_distribution.keys()))
+    y_vals = np.array([error_distribution[x] for x in x_vals])
 
+    # Generalized Error Curve
+    if len(x_vals) > 2:  # Need at least 3 points for spline
+        x_smooth = np.linspace(x_vals.min(), x_vals.max(), 300)
+        spline = make_interp_spline(x_vals, y_vals, k=2)
+        y_smooth = spline(x_smooth)
+    else:
+        x_smooth, y_smooth = x_vals, y_vals  # fallback to raw
+
+    # Plot
     plt.figure(figsize=(10, 6))
-    plt.scatter(x_axis, y_axis)
-    plt.xlabel("Number of Errors (per sample)")
+    plt.plot(x_smooth, y_smooth, label="Generalized Error Shape", color='blue')
+    plt.scatter(x_vals, y_vals, color='crimson', s=50, label='Observed Error Counts')
+    plt.xlabel("Number of Errors per Sample")
     plt.ylabel("Number of Samples")
-    plt.title("Samples vs. Error (Relative Error > 0.2%)")
-    plt.grid(True)
+    plt.title(f"Sample Distribution vs Prediction Errors (Relative Error > {threshold*100:.1f}%)")
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend()
+    plt.tight_layout()
 
     # Save plot to in-memory buffer
     buf = io.BytesIO()
@@ -270,14 +304,15 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
 - **Learning Rate** : {learning_rate}
 
 ## Unweighted Metrics
-- **Mean Square Error**  : {mse:.9f}
-- **RMSE** : {rmse:.9f}
-- **MAE**  : {mae:.9f}
+- **Mean Squared Error (MSE)**        : {mse:.9f}
+- **Root Mean Squared Error (RMSE)**  : {rmse:.9f}
+- **Mean Absolute Error (MAE)**       : {mae:.9f}
 
 ## Weighted Metrics
-- **Weighted MSE**  : {weighted_mse:.9f}
-- **Weighted RMSE** : {weighted_rmse:.9f}
-- **Weighted MAE**  : {weighted_mae:.9f}
+- **Weighted Mean Squared Error (MSE)**        : {weighted_mse:.9f}
+- **Weighted Root Mean Squared Error (RMSE)**  : {weighted_rmse:.9f}
+- **Weighted Mean Absolute Error (MAE)**       : {weighted_mae:.9f}
+
     """
 
     # Upload to S3
@@ -341,9 +376,10 @@ if __name__ == '__main__':
                                         dropout_rate=args.dropout_rate, 
                                         learning_rate=args.learning_rate,
                                         job_name=job_name)
-    
+    plot_error_distribution(y_pred, y_val, threshold=0.5, job_name=job_name)
 
-    #Incorrectly displaying histograms --> get this fixed
-    plot_error_distribution(y_pred, y_val, threshold=0.002, job_name=job_name)
+    np.savetxt("y_pred_sample.csv", y_pred, delimiter=",")
+    np.savetxt("y_val_sample.csv", y_val, delimiter=",")
+
 
 
