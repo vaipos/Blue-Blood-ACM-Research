@@ -220,18 +220,18 @@ def plot_error_distribution(y_pred, y_val, threshold=0.02, job_name=None):
         relative_error > threshold  # else use relative error
     )
     
-    weights = np.zeros_like(y_val)
-    weights[:, :25] = 1.0  # only valid (non-padded) values
+    weights = (y_val != -1.0).astype(float)
+    weights[:, 25:] = 0
 
     #error_mask = (relative_error > threshold) * weights
-    errors_per_sample = np.sum(error_mask, axis=1)  # shape: (n_samples,)
+    errors_per_sample = np.sum(error_mask*weights, axis=1)  # shape: (n_samples,)
 
     per_sample_column_errors = []
 
     # Iterate over each sample
     for i in range(y_val.shape[0]):
         # Only check real data (row 0, columns 0–24)
-        missed_indices = np.where(error_mask[i, :25] == 1)[0]
+        missed_indices = np.where((error_mask[i, :25] * weights[i, :25]) == 1)[0]
         per_sample_column_errors.append(missed_indices.tolist())
     
     for i, missed in enumerate(per_sample_column_errors[:5]):
@@ -252,13 +252,20 @@ def plot_error_distribution(y_pred, y_val, threshold=0.02, job_name=None):
 
     # Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(x_smooth, y_smooth, label="Generalized Error Shape", color='blue')
-    plt.scatter(x_vals, y_vals, color='crimson', s=50, label='Observed Error Counts')
-    plt.xlabel("Number of Errors per Sample")
-    plt.ylabel("Number of Samples")
-    plt.title(f"Sample Distribution vs Prediction Errors (Relative Error > {threshold*100:.1f}%)")
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.legend()
+    plt.plot(x_smooth, y_smooth, label="Generalized Error Shape", color='blue', linewidth=2.5)
+    # Shaded region under the curve
+    plt.fill_between(x_smooth, y_smooth, color='blue', alpha=0.15)
+    plt.scatter(x_vals, y_vals, color='red', s=80, edgecolors='black', label='Observed Error Counts', zorder=5)
+    
+    plt.suptitle("Sample Distribution vs Prediction Errors", fontsize=18, fontweight='bold', color='black')
+    plt.title(f"Relative Error > {threshold*100:.1f}%", fontsize=14, color='black')
+    plt.xlabel("Number of Errors per Sample", fontsize=14, fontweight='bold')
+    plt.ylabel("Number of Samples", fontsize=14, fontweight='bold')
+    
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.legend(fontsize=12)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
     plt.tight_layout()
 
     # Save plot to in-memory buffer
@@ -280,23 +287,24 @@ def evaluate_model_performance(model, X_val, y_val, epochs, lstm_units, dropout_
     rmse = np.sqrt(mse)
     mae = np.mean(np.abs(y_pred - y_val))
 
-    # Weighted Statistical metrics
-    weights = np.zeros_like(y_val)
-    weights[:, :25] = 1.0
+    # (a) Mask out invalid values: either padding (after col 25) or -1.0
+    mask = np.ones_like(y_val)
+    mask[:, 25:] = 0                      # padding columns
+    mask = mask * (y_val != -1.0)        # only real, non-null values
 
+    # (b) Apply to error metrics
     squared_error = (y_pred - y_val) ** 2
     abs_error = np.abs(y_pred - y_val)
 
-    weighted_squared_error = squared_error * weights
-    weighted_abs_error = abs_error * weights
+    weighted_squared_error = squared_error * mask
+    weighted_abs_error = abs_error * mask
 
-    # Weighted metrics
-    weighted_mse = np.sum(weighted_squared_error) / np.sum(weights)
+    weighted_mse = np.sum(weighted_squared_error) / np.sum(mask)
     weighted_rmse = np.sqrt(weighted_mse)
-    weighted_mae = np.sum(weighted_abs_error) / np.sum(weights)
+    weighted_mae = np.sum(weighted_abs_error) / np.sum(mask)
 
     #MD File Contents
-    markdown = f"""# Model Performance Evaluation Report
+    markdown = f"""# **Model Performance Evaluation Report**
 ## Hyperparameter Configuration:
 - **Epochs** : {epochs}
 - **LSTM Units** : {lstm_units}
@@ -345,7 +353,7 @@ if __name__ == '__main__':
 
     # Load training data
     print(f"Loading data from {args.train}")
-    df = pd.read_csv(os.path.join(args.train, 'synthetic_data.csv'))
+    df = pd.read_csv(os.path.join(args.train, 'blue-blood-synthetic-final.csv'))
     
     # Build model with specified hyperparameters
     print("Building & training the model...")
@@ -376,7 +384,7 @@ if __name__ == '__main__':
                                         dropout_rate=args.dropout_rate, 
                                         learning_rate=args.learning_rate,
                                         job_name=job_name)
-    plot_error_distribution(y_pred, y_val, threshold=0.5, job_name=job_name)
+    plot_error_distribution(y_pred, y_val, threshold=0.25, job_name=job_name)
 
     np.savetxt("y_pred_sample.csv", y_pred, delimiter=",")
     np.savetxt("y_val_sample.csv", y_val, delimiter=",")
