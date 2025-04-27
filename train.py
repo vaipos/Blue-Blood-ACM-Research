@@ -174,7 +174,7 @@ def train_model(df, model, epochs=10, job_name=None):
     #return history.history, s3_model_path, s3_chart_path
     return history.history, s3_model_path, s3_chart_path, X_val, y_val
 
-def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker='s', job_name=None):
+def plot_training_val_loss(history, figsize=(10, 6), train_marker='o', val_marker='s', job_name=None):
     # Force Matplotlib to use a non-GUI backend
     matplotlib.use("Agg")
     
@@ -188,11 +188,11 @@ def plot_training_val_loss(history, figsize=(8, 6), train_marker='o', val_marker
     plt.plot(epochs_range, train_loss, label='Training Loss', marker=train_marker, color='crimson')
     if val_loss:
         plt.plot(epochs_range, val_loss, label='Validation Loss', marker=val_marker, color='blue')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title('Training vs Validation Loss')
-    plt.legend()
-    plt.grid(True)
+    plt.xlabel('Epochs', fontsize=14, fontweight='bold')
+    plt.ylabel('Loss', fontsize=14, fontweight='bold')
+    plt.title('Training vs Validation Loss', fontsize=18, fontweight='bold', color='black')
+    plt.legend(fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.5)
     
     # Save plot to in-memory buffer
     buf = io.BytesIO()
