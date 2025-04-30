@@ -34,9 +34,10 @@ CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized f
 - Validity: **93.30%**
 - Quality: **84.66%**
 
-![image](https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9)
-
-![image](https://github.com/user-attachments/assets/99dfe43d-d765-419f-af61-f52984ec3325)
+<div style="display:flex;justify-content:space-between;gap:4rem;margin:0;padding:0;">
+  <img src="https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9" alt="CTGAN Metric Plot 1" width="46%"/>
+  <img src="https://github.com/user-attachments/assets/99dfe43d-d765-419f-af61-f52984ec3325" alt="CTGAN Metric Plot 2" width="46%"/>
+</div>
 
 ### Predictive Modeling
 To capture temporal relationships between complete blood count (CBC) profiles before and after prescription administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
@@ -52,10 +53,10 @@ Despite showing no signs of overfitting, statistical evaluations reveal notable 
 
 Reliable predictions remain challenging due to dataset limitations. Imputed (NULL) fields introduce uncertainty, while noisy features, prescription variability, and outliers disrupt learning patterns. Future work should prioritize advanced imputation, outlier detection, and finer treatment encoding to enhance model reliability.
 
-![training-validation-loss](https://github.com/user-attachments/assets/04185ee3-c275-4c32-8bfc-c934ac6627c1) 
-
-![relative-error-distribution](https://github.com/user-attachments/assets/e73bf771-01ea-4336-8f48-4d776eaffd65)
-
+<div style="display:flex;justify-content:space-between;gap:4rem;margin:0;padding:0;">
+  <img src="https://github.com/user-attachments/assets/04185ee3-c275-4c32-8bfc-c934ac6627c1" alt="Training vs Validation Loss" width="46%"/>
+  <img src="https://github.com/user-attachments/assets/e73bf771-01ea-4336-8f48-4d776eaffd65" alt="Relative Error Distribution" width="46%"/>
+</div>
 
 ## Conclusion
 
