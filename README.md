@@ -27,10 +27,13 @@ Processed data of about ~2,182 samples was stored in **AWS S3** for scalable clo
 ![ACM Final Model Architecture](https://github.com/user-attachments/assets/6ea43330-4a55-47b8-ae9f-4f9c568f1c01)
 
 ### Synthetic Data Generation
-CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis [[1]](#references). Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CTGAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
+
+CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis [[5]](#references). Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CTGAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets [[1]](#references).
+
 **CTGAN Metrics:**
 - Validity: **93.30%**
 - Quality: **84.66%**
+
 ![image](https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9)
 
 ![image](https://github.com/user-attachments/assets/99dfe43d-d765-419f-af61-f52984ec3325)
@@ -55,13 +58,16 @@ This project marks an early step toward improving patient outcomes by providing 
 
 ## References
 
-[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. arXiv.org. https://arxiv.org/abs/2110.01889
+[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. [arXiv:2110.01889](https://arxiv.org/abs/2110.01889)
 
-[2] Johnson, J. A., and Bootman, J. L. (1995). Drug‐related morbidity and mortality: A cost‐of‐illness model. Archives of Internal Medicine, 155(18), 1949–1956.
+[2] Johnson, J.A., & Bootman, J.L. (1995). Drug-related morbidity and mortality: A cost-of-illness model. *Archives of Internal Medicine*, 155(18), 1949–1956.
 
-[3] Johnson, A. E. W., Pollard, T. J., Shen, L., Lehman, L. H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L. A., and Mark, R. G. (2016). MIMIC‐III, a freely accessible critical care database. Scientific Data, 3, 160035.
+[3] Johnson, A.E.W., Pollard, T.J., Shen, L., Lehman, L.H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L.A., & Mark, R.G. (2016). MIMIC-III, a freely accessible critical care database. *Scientific Data*, 3, 160035.
 
-[4] Koroteev, M. V. (2021, March 22). BERT: A review of applications in natural language processing and understanding. arXiv.org. https://arxiv.org/abs/2103.11943
+[4] Koroteev, M.V. (2021). BERT: A review of applications in natural language processing and understanding. [arXiv:2103.11943](https://arxiv.org/abs/2103.11943)
+
+[5] Xu, L., Skoularidou, M., Cuesta-Infante, A., & Veeramachaneni, K. (2019). Modeling Tabular Data Using Conditional GAN. *NeurIPS Workshop on Synthetic Data Generation*, 2019. [arXiv:1907.00503](https://arxiv.org/abs/1907.00503)
+
 
 ## Contributors
 
