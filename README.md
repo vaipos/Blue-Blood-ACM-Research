@@ -1,85 +1,85 @@
-# Blue Blood Onboarding and Review
+# BlueBlood: Predicting Medication Impact on Blood Biomarkers
+BlueBlood is a machine learning pipeline that predicts how prescribed medications alter Complete Blood Count (CBC) profiles. It combines clinical records data from MIMIC-III, CTGAN-based synthetic data generation, and LSTM forecasting models. The entire workflow is built on a scalable AWS stack using S3 for storage, SageMaker for training, and EC2 for compute.
 
-Congratulations and welcome to the **Blue-Blood-ACM-Research** repository! This project is part of an ongoing research effort aimed at integrating simulated drug interaction data and transfer learning to predict changes in a patient's blood profile after drug administration.
+![Blue-Blood-Poster](https://github.com/user-attachments/assets/0b0386fe-f6c7-4fe9-9146-e842be9f13a5)
 
-## Project Overview
 
-The primary goal of this project is to develop a machine learning (ML) model that can integrate simulated drug interaction data with Complete Blood Count (CBC) blood profile data. The model will predict how a patient's blood profile changes following drug administration.
+## Data Sourcing
 
-### Key Objectives:
-- Leverage drug compound datasets and CBC blood profile data to predict potential changes.
-- Use transfer learning to improve model performance despite the lack of post-treatment data.
-- Analyze how drug interactions may affect a patient's blood profile in real-world scenarios.
+The dataset is derived from MIT’s MIMIC‐III clinical database [[3]](#references), which houses over 150,000 clinical records spanning billed prescriptions, hourly vital signs, lab test results, diagnostic codes (ICD‐9), procedure records, microbiology reports, and clinical notes from healthcare providers. To focus our analysis, we extracted and restructured the raw data using Google BigQuery, narrowing the scope to Complete Blood Count (CBC) profiles — a standardized panel of 25 biomarkers that provide a comprehensive snapshot of a patient’s blood health — alongside corresponding prescription records, enabling a targeted investigation of drug impacts through pre‐ and post‐treatment CBC measurements.
 
-## Technologies Used:
+## Data Preprocessing
+Data preprocessing involved two parallel pipelines:
 
-- **Python** for model development
-- **TensorFlow/PyTorch** for deep learning model training
-- **Pandas** and **NumPy** for data manipulation
-- **Scikit-learn** for model evaluation
-- **Matplotlib/Seaborn** for data visualization
+- **Numerical Data (CBC Profiles):**
+  - Scaling
+  - Normalization
+  - Imputation of missing values
 
-## Dataset (MIMIC-III Clinical Database):
+- **Categorical Data (Prescriptions):**
+  - Encoding using **BERT embeddings** [[4]](#references) to capture semantic similarities between medications
 
-The project utilizes:
-- **Drug Compounds Dataset**: Contains information on various drug compounds.
-- **CBC Blood Profile Data**: Comprises patient blood test results, focusing on various blood components like white blood cells, red blood cells, and platelets.
+Processed data of about ~2,182 samples was stored in **AWS S3** for scalable cloud access.
 
-## Onboarding Process and Installation
-**Email your GitHub username to vaishnavi.pasumarthi@acmutd.co, and I will add you as a contributor to the repository.**
+## Model Architecture
 
-To start the project, clone the repository and install the required dependencies.
+### Overall Workflow
+![ACM Final Model Architecture](https://github.com/user-attachments/assets/6ea43330-4a55-47b8-ae9f-4f9c568f1c01)
 
-**More setup instructions will be provided to you during Build Night 1**. 
+### Synthetic Data Generation
 
-### 1. Clone the repository:
+CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis [[5]](#references). Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CTGAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets [[1]](#references).
 
-#### Option 1: Using GitHub Desktop (if you have never worked with Git before):
+**CTGAN Metrics:**
+- Validity: **93.30%**
+- Quality: **84.66%**
 
-1. **Download and Install GitHub Desktop**:
-   - Go to the [GitHub Desktop download page](https://desktop.github.com/).
-   - Download the version for your operating system (Windows or macOS).
-   - Follow the installation instructions to install GitHub Desktop on your computer.
+![image](https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9)
 
-2. **Clone the repository using GitHub Desktop**:
-   - Open GitHub Desktop.
-   - Go to the **File** menu and select **Clone repository**.
-   - In the **Clone a repository** window, select the **URL** tab.
-   - Copy the URL of the repository from GitHub (found under the green "Code" button on the repo page) and paste it into the **Repository URL** field in GitHub Desktop.
-   - Choose a local path to store the repository on your computer.
-   - Click **Clone** to download the repository to your computer.
+![image](https://github.com/user-attachments/assets/99dfe43d-d765-419f-af61-f52984ec3325)
 
-#### Option 2: Using git command line (if you have experiencing using git command lines):
+### Predictive Modeling
+To capture temporal relationships between complete blood count (CBC) profiles before and after prescription administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
 
-Remember to replace "your-username" with your Github username.
+The input consists of padded sequences combining pre‐treatment CBC panels and prescription feature embeddings, ensuring consistent sequence lengths across all samples.
 
-```bash
-git clone https://github.com/your-username/Blue-Blood-ACM-Research.git
-cd Blue-Blood-ACM-Research
-```
+The model predicts post‐treatment CBC blood profiles as continuous vectors, trained using mean squared error (MSE) loss with the Adam optimizer. Performance was evaluated based on MSE, root mean squared error (RMSE), and mean absolute error (MAE) between predicted and actual CBC measurements. It utilized a cloud‐based training and evaluation pipeline using AWS SageMaker and an 80‐20 training-validation split.
 
-### 2. Install dependencies:
 
-#### Check if you have Python and Conda installed:
-Before installing, check if you already have Python and Conda installed on your system by running the following commands:
+## Results
 
-- **Check Python**:
-  ```bash
-  python --version
-  ```
+Despite showing no signs of overfitting, statistical evaluations reveal notable limitations. Predictions for each of the 25 CBC biomarkers deviate by an average of 39.45%, while per‐sample predictions differ by 20.88%. The relative error distribution (Figure 5) shows that 5 to 12 biomarkers per sample deviate by more than 25%.
 
-- **Check Conda**:
-  ```bash
-  conda --version
-  ```
+Reliable predictions remain challenging due to dataset limitations. Imputed (NULL) fields introduce uncertainty, while noisy features, prescription variability, and outliers disrupt learning patterns. Future work should prioritize advanced imputation, outlier detection, and finer treatment encoding to enhance model reliability.
 
-If you see version numbers in response, you already have Python and/or Conda installed! If not, follow the steps below:
+![training-validation-loss](https://github.com/user-attachments/assets/04185ee3-c275-4c32-8bfc-c934ac6627c1) 
 
-#### If you don't have Python:
-- Download Python from [here](https://www.python.org/downloads/).
+![relative-error-distribution](https://github.com/user-attachments/assets/e73bf771-01ea-4336-8f48-4d776eaffd65)
 
-#### If you don't have Conda:
-- Download Conda from [here](https://www.anaconda.com/download/success).
+
+## Conclusion
+
+This project marks an early step toward improving patient outcomes by providing data‐driven insights into how prescribed medications impact physiological biomarkers, addressing gaps in current treatment plans prone to adverse drug reactions (ADRs). Future work could explore advanced architectures like autoencoders, leverage transfer learning, and refine preprocessing and model tuning to better manage clinical data variability and enhance personalized treatment strategies.
+
+## References
+
+[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. arXiv.org. https://arxiv.org/abs/2110.01889
+
+[2] Johnson, J. A., and Bootman, J. L. (1995). Drug‐related morbidity and mortality: A cost‐of‐illness model. Archives of Internal Medicine, 155(18), 1949–1956.
+
+[3] Johnson, A. E. W., Pollard, T. J., Shen, L., Lehman, L. H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L. A., and Mark, R. G. (2016). MIMIC‐III, a freely accessible critical care database. Scientific Data, 3, 160035.
+
+[4] Koroteev, M. V. (2021, March 22). BERT: A review of applications in natural language processing and understanding. arXiv.org. https://arxiv.org/abs/2103.11943
+
+
+## Contributors
+
+- Ubaid Mohammed
+- Advay Chandramouli
+- Neha Senthil Kumar
+- Poojasri Sundaresan
+- **Research Lead:** Vaishnavi Pasumarthi
+- **Faculty Advisors:** Dr. Sriraam Natarajan, Dr. Anurag Nagar
 
 
 ## License
