@@ -2,7 +2,7 @@
 
 ![Blue-Blood-Poster](https://github.com/user-attachments/assets/0b0386fe-f6c7-4fe9-9146-e842be9f13a5)
 
-## Introduction
+## Introduction and Problem Motivation
 
 Understanding how drug compounds alter the human body is vital for advancing personalized healthcare. This project leverages machine learning (ML) to analyze Complete Blood Count (CBC) profiles, uncovering subtle systemic patterns that traditional methods may neglect. 
 
@@ -10,17 +10,34 @@ Nearly 50% of patients with chronic diseases do not respond effectively to first
 
 Current personalized medicine approaches, such as pharmacogenomics (e.g., 23andMe), face cost and real‐time biomarker capture limitations. Meanwhile, ML efforts in drug discovery (e.g., Insilico) and EHR‐based models suffer from missing data and a lack of real-time biological signals. By leveraging synthetic data and deep learning, our project aims to address these gaps, improving diagnosis and therapeutic decision‐making.
 
-## Data Sourcing & Preprocessing
+**Goal:**  
+BlueBlood seeks to model and predict drug impact on physiological biomarkers, offering safer, more personalized treatments.
+
+## Data Sourcing
 
 The dataset is derived from MIT’s MIMIC‐III clinical database, which houses over 150,000 clinical records spanning billed prescriptions, hourly vital signs, lab test results, diagnostic codes (ICD‐9), procedure records, microbiology reports, and clinical notes from healthcare providers. To focus our analysis, we extracted and restructured the raw data using Google BigQuery, narrowing the scope to Complete Blood Count (CBC) profiles — a standardized panel of 25 biomarkers that provide a comprehensive snapshot of a patient’s blood health — alongside corresponding prescription records, enabling a targeted investigation of drug impacts through pre‐ and post‐treatment CBC measurements.
 
-**Data Preprocessing:** 2,182 raw records were migrated to AWS S3 for scalable storage. Preprocessing involved two parallel streams:
-- **Numerical (CBC Data):** Pre and post‐treatment CBC profiles were scaled, normalized, and imputed.
-- **Categorical (Prescriptions):** Prescription records were transformed into embedded vectors using BERT to capture semantic relationships.
+## Data Preprocessing
+Data preprocessing involved two parallel pipelines:
+
+- **Numerical Data (CBC Profiles):**
+  - Scaling
+  - Normalization
+  - Imputation of missing values
+
+- **Categorical Data (Prescriptions):**
+  - Encoding using **BERT embeddings** to capture semantic similarities between medications
+
+Processed data of about ~2,182 samples was stored in **AWS S3** for scalable cloud access.
 
 ## Model Methodology
 
 **Synthetic Data Generation:** CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis. Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values [1]. This architecture enables CT‐GAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
+
+  **CTGAN Metrics:**
+  - Validity: **93.30%**
+  - Quality: **84.66%**
+
 
 **Model Architecture:** To capture temporal relationships between complete blood count (CBC) profiles before and after prescription
 administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
