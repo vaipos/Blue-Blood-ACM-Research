@@ -31,20 +31,25 @@ Data preprocessing involved two parallel pipelines:
 Processed data of about ~2,182 samples was stored in **AWS S3** for scalable cloud access.
 
 ## Model Methodology
+![ACM Final Model Architecture](https://github.com/user-attachments/assets/6ea43330-4a55-47b8-ae9f-4f9c568f1c01)
 
-**Synthetic Data Generation:** CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis. Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values [1]. This architecture enables CT‐GAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
-
+**Synthetic Data Generation:** 
+CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis. Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CT‐GAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
   **CTGAN Metrics:**
   - Validity: **93.30%**
   - Quality: **84.66%**
+  ![image](https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9)
 
 
-**Model Architecture:** To capture temporal relationships between complete blood count (CBC) profiles before and after prescription
-administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
+
+**Model Architecture:** 
+
+To capture temporal relationships between complete blood count (CBC) profiles before and after prescription administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
 
 The input consists of padded sequences combining pre‐treatment CBC panels and prescription feature embeddings, ensuring consistent sequence lengths across all samples.
 
 The model predicts post‐treatment CBC blood profiles as continuous vectors, trained using mean squared error (MSE) loss with the Adam optimizer. Performance was evaluated based on MSE, root mean squared error (RMSE), and mean absolute error (MAE) between predicted and actual CBC measurements. It utilized a cloud‐based training and evaluation pipeline using AWS SageMaker and an 80‐20 training-validation split.
+
 
 ## Results
 
