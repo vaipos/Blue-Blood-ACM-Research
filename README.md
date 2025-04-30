@@ -1,21 +1,12 @@
-# Blue Blood: Predicting Medication Impact on Blood Biomarkers
+# BlueBlood: Predicting Medication Impact on Blood Biomarkers
+BlueBlood is a machine learning pipeline that predicts how prescribed medications alter Complete Blood Count (CBC) profiles. It combines clinical records data from MIMIC-III, CTGAN-based synthetic data generation, and LSTM forecasting models. The entire workflow is built on a scalable AWS stack using S3 for storage, SageMaker for training, and EC2 for compute.
 
 ![Blue-Blood-Poster](https://github.com/user-attachments/assets/0b0386fe-f6c7-4fe9-9146-e842be9f13a5)
 
-## Introduction and Problem Motivation
-
-Understanding how drug compounds alter the human body is vital for advancing personalized healthcare. This project leverages machine learning (ML) to analyze Complete Blood Count (CBC) profiles, uncovering subtle systemic patterns that traditional methods may neglect. 
-
-Nearly 50% of patients with chronic diseases do not respond effectively to first‐line medications, resulting in adverse drug reactions (ADRs) that cost the U.S. healthcare system over $136 billion annually[2]. Hence, understanding how prescribed medications impact blood profiles is paramount for developing safer, more personalized treatments.
-
-Current personalized medicine approaches, such as pharmacogenomics (e.g., 23andMe), face cost and real‐time biomarker capture limitations. Meanwhile, ML efforts in drug discovery (e.g., Insilico) and EHR‐based models suffer from missing data and a lack of real-time biological signals. By leveraging synthetic data and deep learning, our project aims to address these gaps, improving diagnosis and therapeutic decision‐making.
-
-**Goal:**  
-BlueBlood seeks to model and predict drug impact on physiological biomarkers, offering safer, more personalized treatments.
 
 ## Data Sourcing
 
-The dataset is derived from MIT’s MIMIC‐III clinical database, which houses over 150,000 clinical records spanning billed prescriptions, hourly vital signs, lab test results, diagnostic codes (ICD‐9), procedure records, microbiology reports, and clinical notes from healthcare providers. To focus our analysis, we extracted and restructured the raw data using Google BigQuery, narrowing the scope to Complete Blood Count (CBC) profiles — a standardized panel of 25 biomarkers that provide a comprehensive snapshot of a patient’s blood health — alongside corresponding prescription records, enabling a targeted investigation of drug impacts through pre‐ and post‐treatment CBC measurements.
+The dataset is derived from MIT’s MIMIC‐III clinical database [[3]](#references), which houses over 150,000 clinical records spanning billed prescriptions, hourly vital signs, lab test results, diagnostic codes (ICD‐9), procedure records, microbiology reports, and clinical notes from healthcare providers. To focus our analysis, we extracted and restructured the raw data using Google BigQuery, narrowing the scope to Complete Blood Count (CBC) profiles — a standardized panel of 25 biomarkers that provide a comprehensive snapshot of a patient’s blood health — alongside corresponding prescription records, enabling a targeted investigation of drug impacts through pre‐ and post‐treatment CBC measurements.
 
 ## Data Preprocessing
 Data preprocessing involved two parallel pipelines:
@@ -26,7 +17,7 @@ Data preprocessing involved two parallel pipelines:
   - Imputation of missing values
 
 - **Categorical Data (Prescriptions):**
-  - Encoding using **BERT embeddings** to capture semantic similarities between medications
+  - Encoding using **BERT embeddings** [[4]](#references) to capture semantic similarities between medications
 
 Processed data of about ~2,182 samples was stored in **AWS S3** for scalable cloud access.
 
@@ -36,12 +27,13 @@ Processed data of about ~2,182 samples was stored in **AWS S3** for scalable clo
 ![ACM Final Model Architecture](https://github.com/user-attachments/assets/6ea43330-4a55-47b8-ae9f-4f9c568f1c01)
 
 ### Synthetic Data Generation
-CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis. Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CT‐GAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
+CTGAN, developed by MIT, is a generative adversarial network (GAN) specialized for tabular data synthesis [[1]](#references). Unlike traditional GANs, CTGAN introduces a conditional generator that samples a discrete variable first, ensuring better handling of imbalanced categorical features. Mode‐specific normalization further stabilizes training by centering numerical columns around their most frequent values. This architecture enables CTGAN to effectively model numerical and categorical features, overcoming limitations faced by traditional GANs when applied to structured healthcare datasets.
 **CTGAN Metrics:**
 - Validity: **93.30%**
 - Quality: **84.66%**
 ![image](https://github.com/user-attachments/assets/c95bea25-e8d7-47fa-a1a9-905d58b346a9)
 
+![image](https://github.com/user-attachments/assets/99dfe43d-d765-419f-af61-f52984ec3325)
 
 ### Predictive Modeling
 To capture temporal relationships between complete blood count (CBC) profiles before and after prescription administration, we utilized a time‐series‐based Long Short‐Term Memory (LSTM) network, a type of recurrent neural network.
