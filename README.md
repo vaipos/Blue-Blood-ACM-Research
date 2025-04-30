@@ -52,21 +52,24 @@ Despite showing no signs of overfitting, statistical evaluations reveal notable 
 
 Reliable predictions remain challenging due to dataset limitations. Imputed (NULL) fields introduce uncertainty, while noisy features, prescription variability, and outliers disrupt learning patterns. Future work should prioritize advanced imputation, outlier detection, and finer treatment encoding to enhance model reliability.
 
+![training-validation-loss](https://github.com/user-attachments/assets/04185ee3-c275-4c32-8bfc-c934ac6627c1) 
+
+![relative-error-distribution](https://github.com/user-attachments/assets/e73bf771-01ea-4336-8f48-4d776eaffd65)
+
+
 ## Conclusion
 
 This project marks an early step toward improving patient outcomes by providing data‐driven insights into how prescribed medications impact physiological biomarkers, addressing gaps in current treatment plans prone to adverse drug reactions (ADRs). Future work could explore advanced architectures like autoencoders, leverage transfer learning, and refine preprocessing and model tuning to better manage clinical data variability and enhance personalized treatment strategies.
 
 ## References
 
-[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. [arXiv:2110.01889](https://arxiv.org/abs/2110.01889)
+[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. arXiv.org. https://arxiv.org/abs/2110.01889
 
-[2] Johnson, J.A., & Bootman, J.L. (1995). Drug-related morbidity and mortality: A cost-of-illness model. *Archives of Internal Medicine*, 155(18), 1949–1956.
+[2] Johnson, J. A., and Bootman, J. L. (1995). Drug‐related morbidity and mortality: A cost‐of‐illness model. Archives of Internal Medicine, 155(18), 1949–1956.
 
-[3] Johnson, A.E.W., Pollard, T.J., Shen, L., Lehman, L.H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L.A., & Mark, R.G. (2016). MIMIC-III, a freely accessible critical care database. *Scientific Data*, 3, 160035.
+[3] Johnson, A. E. W., Pollard, T. J., Shen, L., Lehman, L. H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L. A., and Mark, R. G. (2016). MIMIC‐III, a freely accessible critical care database. Scientific Data, 3, 160035.
 
-[4] Koroteev, M.V. (2021). BERT: A review of applications in natural language processing and understanding. [arXiv:2103.11943](https://arxiv.org/abs/2103.11943)
-
-[5] Xu, L., Skoularidou, M., Cuesta-Infante, A., & Veeramachaneni, K. (2019). Modeling Tabular Data Using Conditional GAN. *NeurIPS Workshop on Synthetic Data Generation*, 2019. [arXiv:1907.00503](https://arxiv.org/abs/1907.00503)
+[4] Koroteev, M. V. (2021, March 22). BERT: A review of applications in natural language processing and understanding. arXiv.org. https://arxiv.org/abs/2103.11943
 
 
 ## Contributors
