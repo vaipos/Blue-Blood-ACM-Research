@@ -63,13 +63,15 @@ This project marks an early step toward improving patient outcomes by providing 
 
 ## References
 
-[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. arXiv.org. https://arxiv.org/abs/2110.01889
+[1] Borisov, V., Leemann, T., Seßler, K., Haug, J., Pawelczyk, M., and Kasneci, G. (2021). Deep neural networks and tabular data: A survey. [arXiv:2110.01889](https://arxiv.org/abs/2110.01889)
+ 
+ [2] Johnson, J.A., & Bootman, J.L. (1995). Drug-related morbidity and mortality: A cost-of-illness model. *Archives of Internal Medicine*, 155(18), 1949–1956.
+ 
+ [3] Johnson, A.E.W., Pollard, T.J., Shen, L., Lehman, L.H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L.A., & Mark, R.G. (2016). MIMIC-III, a freely accessible critical care database. *Scientific Data*, 3, 160035.
 
-[2] Johnson, J. A., and Bootman, J. L. (1995). Drug‐related morbidity and mortality: A cost‐of‐illness model. Archives of Internal Medicine, 155(18), 1949–1956.
+[4] Koroteev, M.V. (2021). BERT: A review of applications in natural language processing and understanding. [arXiv:2103.11943](https://arxiv.org/abs/2103.11943)
 
-[3] Johnson, A. E. W., Pollard, T. J., Shen, L., Lehman, L. H., Feng, M., Ghassemi, M., Moody, B., Szolovits, P., Celi, L. A., and Mark, R. G. (2016). MIMIC‐III, a freely accessible critical care database. Scientific Data, 3, 160035.
-
-[4] Koroteev, M. V. (2021, March 22). BERT: A review of applications in natural language processing and understanding. arXiv.org. https://arxiv.org/abs/2103.11943
+[5] Xu, L., Skoularidou, M., Cuesta-Infante, A., & Veeramachaneni, K. (2019). Modeling Tabular Data Using Conditional GAN. *NeurIPS Workshop on Synthetic Data Generation*, 2019. [arXiv:1907.00503](https://arxiv.org/abs/1907.00503)
 
 
 ## Contributors
